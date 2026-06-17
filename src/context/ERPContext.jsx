@@ -55,6 +55,11 @@ const initialBuildings = [
   { id: 'b6', name: '유림타운 6동', storeName: 'CU 편의점', officeName: '태양 기획 (사무실)', expiryDate: '2027-05-18', monthlyRent: 3800000, rentPaid: true, electricity: 480, water: 70, officeVacant: false }
 ];
 
+const initialKitchenOrders = [
+  { id: 'ko1', storeName: '양평신내서울해장국', menuName: '양평해장국 특', quantity: 1, workerName: '김철수', timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
+  { id: 'ko2', storeName: '유림푸드 중화식당', menuName: '자장면 세트', quantity: 1, workerName: '이영희', timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString() }
+];
+
 export const standardCatalog = [
   { id: 'cat1', name: '양파 망', category: '야채류', unit: '망', price: 15000, icon: '🥬' },
   { id: 'cat2', name: '의성 마늘 kg', category: '야채류', unit: 'kg', price: 9500, icon: '🧄' },
@@ -110,6 +115,16 @@ export const ERPProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : initialBuildings;
   });
 
+  const [kitchenOrders, setKitchenOrders] = useState(() => {
+    const saved = localStorage.getItem('erp_kitchen_orders');
+    return saved ? JSON.parse(saved) : initialKitchenOrders;
+  });
+
+  const [coldChainTemp, setColdChainTemp] = useState(() => {
+    const saved = localStorage.getItem('erp_cold_chain_temp');
+    return saved ? Number(saved) : -18.5;
+  });
+
   useEffect(() => {
     localStorage.setItem('erp_companies', JSON.stringify(companies));
   }, [companies]);
@@ -133,6 +148,14 @@ export const ERPProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('erp_buildings', JSON.stringify(buildings));
   }, [buildings]);
+
+  useEffect(() => {
+    localStorage.setItem('erp_kitchen_orders', JSON.stringify(kitchenOrders));
+  }, [kitchenOrders]);
+
+  useEffect(() => {
+    localStorage.setItem('erp_cold_chain_temp', coldChainTemp.toString());
+  }, [coldChainTemp]);
 
   // SCM / ERP Actions
   const addSCMOrder = (storeName, itemName, quantity, unit, price) => {
@@ -296,6 +319,17 @@ export const ERPProvider = ({ children }) => {
     };
     setSales(prev => [newSale, ...prev]);
 
+    // 4. Send to Kitchen Display System (KDS)
+    const newKitchenOrder = {
+      id: `ko_${Date.now()}`,
+      storeName,
+      menuName: customMenuName,
+      quantity: 1,
+      workerName: worker.name,
+      timestamp: new Date().toISOString()
+    };
+    setKitchenOrders(prev => [newKitchenOrder, ...prev]);
+
     return { 
       success: true, 
       workerName: worker.name,
@@ -342,11 +376,17 @@ export const ERPProvider = ({ children }) => {
     setSales(initialSales);
     setIot(initialIotFacilities);
     setBuildings(initialBuildings);
+    setKitchenOrders(initialKitchenOrders);
+    setColdChainTemp(-18.5);
     setTotalSavings(0);
   };
 
   const sendDunningNotice = (buildingId) => {
     setBuildings(prev => prev.map(b => b.id === buildingId ? { ...b, rentPaid: true } : b));
+  };
+
+  const completeKitchenOrder = (orderId) => {
+    setKitchenOrders(prev => prev.filter(o => o.id !== orderId));
   };
 
   return (
@@ -357,6 +397,9 @@ export const ERPProvider = ({ children }) => {
       sales,
       iot,
       buildings,
+      kitchenOrders,
+      coldChainTemp,
+      setColdChainTemp,
       totalSavings,
       addSCMOrder,
       addBulkSCMOrders,
@@ -371,6 +414,7 @@ export const ERPProvider = ({ children }) => {
       updateAcStatus,
       updateTempSetting,
       sendDunningNotice,
+      completeKitchenOrder,
       resetToInitial
     }}>
       {children}
