@@ -24,3 +24,7 @@ chrome_profile_notebooklm/
 *.njsproj
 *.sln
 *.sw?
+
+# Local database files
+server/data/
+.firebase/

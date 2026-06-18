@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pg from 'pg';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
@@ -40,7 +42,7 @@ if (process.env.DATABASE_URL) {
     console.error('Failed to initialize PostgreSQL pool, falling back to In-Memory mode:', err.message);
   }
 } else {
-  console.log('No DATABASE_URL found. Running in In-Memory fallback mode (ideal for local testing).');
+  console.log('No DATABASE_URL found. Running in Local File-based Persistence mode.');
 }
 
 // ----------------------------------------------------
@@ -107,6 +109,61 @@ let kitchenOrders = [
 
 let totalSavings = 0;
 
+// ----------------------------------------------------
+// LOCAL FILE PERSISTENCE CONFIGURATION
+// ----------------------------------------------------
+const DATA_DIR = path.join(process.cwd(), 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const loadData = () => {
+  if (useDatabase) return;
+  try {
+    const companiesPath = path.join(DATA_DIR, 'companies.json');
+    const workersPath = path.join(DATA_DIR, 'workers.json');
+    const ordersPath = path.join(DATA_DIR, 'orders.json');
+    const salesPath = path.join(DATA_DIR, 'sales.json');
+    const iotPath = path.join(DATA_DIR, 'iot.json');
+    const buildingsPath = path.join(DATA_DIR, 'buildings.json');
+    const kitchenOrdersPath = path.join(DATA_DIR, 'kitchenOrders.json');
+    const savingsPath = path.join(DATA_DIR, 'totalSavings.json');
+
+    if (fs.existsSync(companiesPath)) companies = JSON.parse(fs.readFileSync(companiesPath, 'utf8'));
+    if (fs.existsSync(workersPath)) workers = JSON.parse(fs.readFileSync(workersPath, 'utf8'));
+    if (fs.existsSync(ordersPath)) orders = JSON.parse(fs.readFileSync(ordersPath, 'utf8'));
+    if (fs.existsSync(salesPath)) sales = JSON.parse(fs.readFileSync(salesPath, 'utf8'));
+    if (fs.existsSync(iotPath)) iot = JSON.parse(fs.readFileSync(iotPath, 'utf8'));
+    if (fs.existsSync(buildingsPath)) buildings = JSON.parse(fs.readFileSync(buildingsPath, 'utf8'));
+    if (fs.existsSync(kitchenOrdersPath)) kitchenOrders = JSON.parse(fs.readFileSync(kitchenOrdersPath, 'utf8'));
+    if (fs.existsSync(savingsPath)) totalSavings = Number(fs.readFileSync(savingsPath, 'utf8'));
+    
+    console.log('Local persistent data loaded successfully.');
+  } catch (err) {
+    console.error('Failed to load local persistent data, using defaults:', err.message);
+  }
+};
+
+const saveData = () => {
+  if (useDatabase) return;
+  try {
+    fs.writeFileSync(path.join(DATA_DIR, 'companies.json'), JSON.stringify(companies, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'workers.json'), JSON.stringify(workers, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'orders.json'), JSON.stringify(orders, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'sales.json'), JSON.stringify(sales, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'iot.json'), JSON.stringify(iot, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'buildings.json'), JSON.stringify(buildings, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'kitchenOrders.json'), JSON.stringify(kitchenOrders, null, 2), 'utf8');
+    fs.writeFileSync(path.join(DATA_DIR, 'totalSavings.json'), String(totalSavings), 'utf8');
+  } catch (err) {
+    console.error('Failed to save persistent data:', err.message);
+  }
+};
+
+// Load data immediately on startup
+loadData();
+saveData();
+
 // Helper query function to bridge db & memory
 async function runQuery(sql, params = [], memoryCallback) {
   if (useDatabase) {
@@ -146,6 +203,7 @@ app.post('/api/companies/charge', async (req, res) => {
     }
   } else {
     companies = companies.map(c => c.id === companyId ? { ...c, balance: c.balance + amt } : c);
+    saveData();
     res.json({ success: true, companies });
   }
 });
@@ -188,6 +246,7 @@ app.post('/api/workers', async (req, res) => {
     const compName = companies.find(c => c.id === companyId)?.name || '-';
     const newWorker = { id, companyId, companyName: compName, name, phone, remainingPoints: points, qrCode };
     workers.push(newWorker);
+    saveData();
     res.json({ success: true, worker: newWorker });
   }
 });
@@ -203,6 +262,7 @@ app.delete('/api/workers/:id', async (req, res) => {
     }
   } else {
     workers = workers.filter(w => w.id !== id);
+    saveData();
     res.json({ success: true });
   }
 });
@@ -244,6 +304,7 @@ app.post('/api/orders', async (req, res) => {
     }
   } else {
     orders.unshift(newOrder);
+    saveData();
     res.json({ success: true, order: newOrder });
   }
 });
@@ -279,6 +340,7 @@ app.post('/api/orders/bulk', async (req, res) => {
     }
   } else {
     orders = [...newOrders, ...orders];
+    saveData();
     res.json({ success: true, orders: newOrders });
   }
 });
@@ -365,6 +427,7 @@ app.post('/api/orders/negotiate', async (req, res) => {
     });
 
     totalSavings += roundSavings;
+    saveData();
     res.json({
       success: true,
       savings: roundSavings,
@@ -386,6 +449,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
     }
   } else {
     orders = orders.map(o => o.id === id ? { ...o, status } : o);
+    saveData();
     res.json({ success: true });
   }
 });
@@ -424,6 +488,7 @@ app.post('/api/sales/general', async (req, res) => {
     }
   } else {
     sales.unshift(newSale);
+    saveData();
     res.json({ success: true, sale: newSale });
   }
 });
@@ -578,6 +643,7 @@ app.post('/api/sales/checkout', async (req, res) => {
 
     // 결제 성공 토큰 캐시에 기록
     usedQrTokens.add(qrCode);
+    saveData();
 
     res.json({
       success: true,
@@ -616,6 +682,7 @@ app.post('/api/iot/ac-peak', async (req, res) => {
     }
   } else {
     iot.acPeakControl = !iot.acPeakControl;
+    saveData();
     res.json(iot);
   }
 });
@@ -632,6 +699,7 @@ app.post('/api/iot/ac-status', async (req, res) => {
     }
   } else {
     iot.acStatus = status;
+    saveData();
     res.json(iot);
   }
 });
@@ -648,6 +716,7 @@ app.post('/api/iot/temp', async (req, res) => {
     }
   } else {
     iot.tempSetting = Number(temp);
+    saveData();
     res.json(iot);
   }
 });
@@ -664,6 +733,7 @@ app.post('/api/iot/coldchain', async (req, res) => {
     }
   } else {
     iot.coldChainTemp = Number(temp);
+    saveData();
     res.json(iot);
   }
 });
@@ -687,6 +757,7 @@ app.post('/api/buildings/:id/dunning', async (req, res) => {
     }
   } else {
     buildings = buildings.map(b => b.id === id ? { ...b, rentPaid: true } : b);
+    saveData();
     res.json({ success: true });
   }
 });
@@ -710,6 +781,7 @@ app.delete('/api/kitchen-orders/:id', async (req, res) => {
     }
   } else {
     kitchenOrders = kitchenOrders.filter(ko => ko.id !== id);
+    saveData();
     res.json({ success: true });
   }
 });
@@ -785,6 +857,7 @@ app.post('/api/system/reset', (req, res) => {
   ];
   totalSavings = 0;
   usedQrTokens.clear();
+  saveData();
   
   res.json({ success: true, message: 'System state reset.' });
 });
