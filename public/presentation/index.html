@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>유림푸드 F&B 타운 통합관리시스템(ERP) 보고서</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts (Outfit & Noto Sans KR) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans KR', 'Outfit', sans-serif;
+      background-color: #0b0f19;
+      color: #f1f5f9;
+    }
+    .slide-enter {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    .slide-active {
+      opacity: 1;
+      transform: translateX(0);
+      transition: all 0.5s ease-out;
+    }
+    .slide-exit {
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: all 0.5s ease-out;
+    }
+  </style>
+</head>
+<body class="overflow-hidden h-screen flex flex-col justify-between selection:bg-blue-600 selection:text-white">
+
+  <!-- TOP HEADER -->
+  <header class="w-full px-8 py-4 bg-slate-900/50 border-b border-slate-800 backdrop-blur-md flex justify-between items-center z-10">
+    <div class="flex items-center gap-3">
+      <div class="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl text-white shadow-lg shadow-blue-500/20">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      </div>
+      <div>
+        <span class="text-xs font-bold text-blue-500 uppercase tracking-widest font-mono">BUSINESS REPORT</span>
+        <h1 class="text-lg font-black tracking-tight bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">
+          유림푸드 F&B 타운 통합관리시스템
+        </h1>
+      </div>
+    </div>
+    <div class="flex items-center gap-4 text-sm font-medium text-slate-400">
+      <span class="px-3 py-1 bg-slate-800/80 border border-slate-700/50 rounded-full text-xs text-blue-400 font-bold">총괄사장 보고용</span>
+      <span>수신: <strong class="text-slate-200">함용운 대표님</strong></span>
+      <span class="text-slate-600">|</span>
+      <span>보고: <strong class="text-slate-200">이용주 대표</strong></span>
+    </div>
+  </header>
+
+  <!-- SLIDES CONTAINER -->
+  <main class="flex-1 relative w-full flex items-center justify-center px-8 py-6 overflow-hidden">
+    
+    <!-- ==================== SLIDE 1: COVER ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full flex flex-col justify-center items-center text-center px-4" id="slide-0">
+      <div class="absolute -top-12 -left-12 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -z-10"></div>
+      <div class="absolute -bottom-12 -right-12 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -z-10"></div>
+      
+      <div class="mb-4 px-4 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-full text-xs font-extrabold text-blue-400 uppercase tracking-widest animate-pulse">
+        Digital Transformation & F&B Management
+      </div>
+      <h2 class="text-5xl md:text-6xl font-black tracking-tight leading-tight text-white mb-6">
+        유림푸드 F&B 타운<br>
+        <span class="bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">통합관리시스템(ERP)</span> 도입 보고
+      </h2>
+      <p class="text-lg text-slate-400 max-w-2xl leading-relaxed mb-12">
+        종이 식권 정산의 비효율을 100% 디지털 포인트화로 극복하고, 공동구매를 통한 원가 절감 및 프롭테크 기반 임대 관리를 연동한 스마트 타운 통합 솔루션입니다.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full">
+        <div class="p-6 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left">
+          <div class="text-blue-500 font-bold text-lg mb-2">01. 식권의 포인트 전환</div>
+          <p class="text-xs text-slate-400 leading-relaxed">애매한 1/2/3식 형태를 탈피, 원화 금액과 1:1 매칭되는 선불 포인트 도입으로 식자재 원가 정밀화 및 가상계좌 즉시 충전 구현</p>
+        </div>
+        <div class="p-6 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left">
+          <div class="text-indigo-500 font-bold text-lg mb-2">02. 실시간 탑다운 정산</div>
+          <p class="text-xs text-slate-400 leading-relaxed">최고 관리자가 매출 기여도 및 동별 인건비 효율, 미납 매장 독촉장 송부와 공실 모집을 실시간으로 관리하는 프롭테크 연동</p>
+        </div>
+        <div class="p-6 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-left">
+          <div class="text-emerald-500 font-bold text-lg mb-2">03. SCM 공동구매 시스템</div>
+          <p class="text-xs text-slate-400 leading-relaxed">각 식당의 발주 목록을 하나로 모아 본사 차원에서 도매 단가 대량 할인을 협상(네고)하여 점주 원가 절감 지원</p>
+        </div>
+      </div>
+      
+      <div class="mt-12 text-xs text-slate-500 font-mono flex gap-4">
+        <span>[←] 이전 슬라이드</span>
+        <span>[→ / Space] 다음 슬라이드</span>
+        <span>[화면 클릭] 이미지 크게 보기</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 2: BACKGROUND & PURPOSE ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-1">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">01. BACKGROUND & PURPOSE</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          종이 식권의 한계 극복 및<br>타운 스마트 관리 체계 수립
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          하이닉스 반도체 건설 현장 배후에 위치한 유림 F&B 타운은 수백 명의 근로자가 매일 이용하는 핵심 상권입니다. 기존 수작업 정산 방식의 한계를 디지털로 해결합니다.
+        </p>
+        <div class="flex flex-col gap-3 mt-2">
+          <div class="flex gap-3 items-start p-3 bg-red-950/20 border border-red-900/30 rounded-xl">
+            <span class="text-red-500 text-sm mt-0.5">⚠️</span>
+            <div>
+              <h4 class="text-xs font-bold text-red-300">구식 장부/종이 식권의 정산 한계</h4>
+              <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">식사 이용 내역 수기 취합으로 월말 정산에 막대한 행정 공수 소요. 메뉴별 단가 상이로 정산 분쟁 발생.</p>
+            </div>
+          </div>
+          <div class="flex gap-3 items-start p-3 bg-emerald-950/20 border border-emerald-900/30 rounded-xl">
+            <span class="text-emerald-500 text-sm mt-0.5">✅</span>
+            <div>
+              <h4 class="text-xs font-bold text-emerald-300">디지털 통합 플랫폼 도입 성과</h4>
+              <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">1포인트=1원 기반의 전자 식권 배포. 본사-대리점-근로자가 동일한 데이터를 실시간으로 모니터링하여 투명성 100% 확보.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <div class="relative group cursor-pointer border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900/80 max-h-[460px] flex items-center justify-center" onclick="zoomImage('./images/login_portal_initial.png')">
+          <img src="./images/login_portal_initial.png" alt="권한별 로그인 화면" class="w-full h-auto object-contain">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm backdrop-blur-xs">
+            🔍 클릭하여 이미지 확대
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 1. 사용자 권한 분리 로그인 포털 화면</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 3: SYSTEM ARCHITECTURE ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-2">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">02. SYSTEM ARCHITECTURE</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          5대 사용자 그룹이 연동되는<br>유기적 디지털 에코시스템
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          유림푸드 ERP는 단순한 단독 프로그램이 아닌, 현장의 모든 이해관계자를 유기적으로 묶어 데이터 사각지대를 완전히 없애는 스마트 허브 구조입니다.
+        </p>
+        <div class="grid grid-cols-1 gap-2.5 text-xs text-slate-300 mt-2">
+          <div class="flex items-center gap-3 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl">
+            <span class="w-5 h-5 rounded bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px]">1</span>
+            <span><strong>최고 관리자:</strong> 매출 현황, 미납 독촉, 식자재 공동구매 승인 등 총괄</span>
+          </div>
+          <div class="flex items-center gap-3 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl">
+            <span class="w-5 h-5 rounded bg-indigo-600/30 text-indigo-400 flex items-center justify-center font-bold text-[10px]">2</span>
+            <span><strong>B2B 협력사:</strong> 예치금 관리, 근로자 등록 및 식권 실시간 발급</span>
+          </div>
+          <div class="flex items-center gap-3 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl">
+            <span class="w-5 h-5 rounded bg-emerald-600/30 text-emerald-400 flex items-center justify-center font-bold text-[10px]">3</span>
+            <span><strong>식당 POS:</strong> 카운터에서 모바일 OTP QR 결제 및 식자재 공동 발주</span>
+          </div>
+          <div class="flex items-center gap-3 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl">
+            <span class="w-5 h-5 rounded bg-purple-600/30 text-purple-400 flex items-center justify-center font-bold text-[10px]">4</span>
+            <span><strong>근로자 모바일:</strong> 개인 폰으로 30초 한도 일회용 QR 생성 및 결제</span>
+          </div>
+          <div class="flex items-center gap-3 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl">
+            <span class="w-5 h-5 rounded bg-rose-600/30 text-rose-400 flex items-center justify-center font-bold text-[10px]">5</span>
+            <span><strong>주방 KDS:</strong> 주문 자동 접수, 조리 지연 시각 경보 및 완료 호출</span>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <!-- Visual diagram built with tailwind -->
+        <div class="p-6 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl w-full flex flex-col gap-6 max-h-[460px] justify-center">
+          <div class="text-center font-bold text-slate-200 text-sm">유림푸드 F&B 타운 실시간 데이터 흐름도</div>
+          <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div class="w-full md:w-[180px] p-3 bg-blue-950/40 border border-blue-900/50 rounded-xl text-center flex flex-col gap-1">
+              <span class="text-xs font-bold text-blue-400">B2B 건설 협력사</span>
+              <span class="text-[10px] text-slate-400">선불 예치금 입금 및 식권 포인트 발급</span>
+            </div>
+            <div class="text-slate-500 font-bold hidden md:block">➔</div>
+            <div class="w-full md:w-[180px] p-3 bg-purple-950/40 border border-purple-900/50 rounded-xl text-center flex flex-col gap-1">
+              <span class="text-xs font-bold text-purple-400">근로자 모바일</span>
+              <span class="text-[10px] text-slate-400">OTP QR 코드 생성 (30초마다 보안 자동갱신)</span>
+            </div>
+            <div class="text-slate-500 font-bold hidden md:block">➔</div>
+            <div class="w-full md:w-[180px] p-3 bg-emerald-950/40 border border-emerald-900/50 rounded-xl text-center flex flex-col gap-1">
+              <span class="text-xs font-bold text-emerald-400">매장 POS 결제</span>
+              <span class="text-[10px] text-slate-400">카운터 QR 스캔 및 포인트 자동차감</span>
+            </div>
+          </div>
+          <div class="border-t border-slate-800 pt-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div class="w-full md:w-[280px] p-3 bg-rose-950/40 border border-rose-900/50 rounded-xl text-center flex flex-col gap-1 mx-auto">
+              <span class="text-xs font-bold text-rose-400">주방 KDS 조리 주문서</span>
+              <span class="text-[10px] text-slate-400">결제 완료와 동시에 실시간 주문 접수 및 3분 경고 타이머</span>
+            </div>
+            <div class="w-full md:w-[280px] p-3 bg-slate-950/40 border border-slate-900/50 rounded-xl text-center flex flex-col gap-1 mx-auto">
+              <span class="text-xs font-bold text-slate-300">최고 관리자 (본사)</span>
+              <span class="text-[10px] text-slate-400">전체 매출 기여도 분석 및 동별 인건비/임대 정산</span>
+            </div>
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 2. 5대 사용자 그룹 연동 아키텍처</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 4: SUPER ADMIN ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-3">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">03. SUPER ADMIN MENU</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          본사 경영 효율화를 위한<br>최고 관리자 메인 대시보드
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          4대 KPI 요약 카드를 바탕으로 한 프롭테크 임대관리 및 인건비 제어 기능입니다. 클릭 한 번으로 세부 내역이 펼쳐지는 **탑다운 드릴다운** 방식을 채택했습니다.
+        </p>
+        <div class="flex flex-col gap-2.5 text-xs">
+          <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-xl flex justify-between items-center">
+            <div>
+              <span class="text-blue-400 font-bold">1. 금일 타운 총매출액 드릴다운</span>
+              <p class="text-[10px] text-slate-400 mt-0.5">입점 식당별 금일 누적 매출 및 결제 트랙션 5개 실시간 조회</p>
+            </div>
+            <span class="px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-md text-[10px] font-mono">실시간</span>
+          </div>
+          <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-xl flex justify-between items-center">
+            <div>
+              <span class="text-emerald-400 font-bold">2. B2B 식권 예치금 & 식봄 SCM</span>
+              <p class="text-[10px] text-slate-400 mt-0.5">협력업체별 선불 예치금 잔액 모니터링 및 공동구매 대량 네고 승인</p>
+            </div>
+            <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-md text-[10px] font-mono">네고 절감</span>
+          </div>
+          <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-xl flex justify-between items-center">
+            <div>
+              <span class="text-indigo-400 font-bold">3. 임대 및 공실 수납 독촉 자동화</span>
+              <p class="text-[10px] text-slate-400 mt-0.5">유림타운 상동 임대 수납 관리. 미납 매장 대상 즉시 독촉장 전송 및 공실 모집 상태 제어</p>
+            </div>
+            <span class="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-md text-[10px] font-mono">프롭테크</span>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <div class="relative group cursor-pointer border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900/80 max-h-[460px] flex items-center justify-center" onclick="zoomImage('./images/super_admin_final.png')">
+          <img src="./images/super_admin_final.png" alt="최고 관리자 대시보드" class="w-full h-auto object-contain">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm backdrop-blur-xs">
+            🔍 클릭하여 이미지 확대
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 3. 최고 관리자 대시보드 화면 및 KPI 드릴다운</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 5: B2B PORTAL ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-4">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">04. B2B CLIENT PORTAL</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          B2B 협력 건설업체 포털:<br>선불 예치금 및 근로자 관리
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          협력 건설업체(예: 현대건설) 담당자가 로그인하여 직접 소속 근로자 식권 포인트를 관리하고 장부를 검수하는 화면입니다.
+        </p>
+        <div class="flex flex-col gap-3 mt-1">
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-xs text-slate-300"><strong>1포인트 = 1원:</strong> 1식/2식/3식의 모호함을 탈피하여 원화 포인트 가상 예치금으로 관리</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-xs text-slate-300"><strong>가상계좌 즉시 충전:</strong> 예외 수작업 없이 전용 계좌번호로 실시간 입금 충전 처리</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-xs text-slate-300"><strong>실시간 근로자 식사이력:</strong> 언제 어떤 메뉴로 누가 식사했는지 엑셀과 연동되는 투명 장부</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-xs text-slate-300"><strong>누적/당월 사용액 표기:</strong> 이용주 대표님의 적극적인 피드백을 반영하여 직관적인 원화 텍스트 표기 적용</span>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <div class="relative group cursor-pointer border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900/80 max-h-[460px] flex items-center justify-center" onclick="zoomImage('./images/b2b_settlement_dashboard.png')">
+          <img src="./images/b2b_settlement_dashboard.png" alt="B2B 협력업체 포털" class="w-full h-auto object-contain">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm backdrop-blur-xs">
+            🔍 클릭하여 이미지 확대
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 4. B2B 협력사 예치금 충전 및 식사이력 모니터링 화면</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 6: STORE POS ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-5">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">05. STORE POS & SCANNER</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          입점 매장 POS 결제 및<br>실시간 식자재 발주 연동
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          식당 카운터에서 직관적으로 결제를 처리하고 필요한 자재를 실시간으로 주문하는 식당 점주용 기능입니다.
+        </p>
+        <div class="flex flex-col gap-3 mt-1">
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-xs text-slate-300"><strong>모바일 QR 바코드 결제:</strong> 근로자 스마트폰 화면을 리더기로 스캔하여 간편한 체크아웃</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-xs text-slate-300"><strong>결제 결과 3초 자동 피드백:</strong> 결제 성공 시 잔액과 소속을 팝업으로 표기하고 3초 뒤 자동 페이드아웃</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-xs text-slate-300"><strong>30초 만료 시간제 OTP:</strong> 중복 스캔으로 인한 더블 페이먼트 및 부정 사용을 원천 차단</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-xs text-slate-300"><strong>도매 마켓(식봄) 실시간 발주:</strong> 단품 주문은 물론, 본사 승인 시 공동구매 자동 네고 전환 기능 제공</span>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <div class="relative group cursor-pointer border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900/80 max-h-[460px] flex items-center justify-center" onclick="zoomImage('./images/store_pos_success.png')">
+          <img src="./images/store_pos_success.png" alt="식당 POS 결제 화면" class="w-full h-auto object-contain">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm backdrop-blur-xs">
+            🔍 클릭하여 이미지 확대
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 5. 식당 POS 메뉴 선택 및 근로자 식권 QR 스캔 결제 완료 화면</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 7: WORKER MOBILE ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-6">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">06. WORKER MOBILE VOUCHER</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          스마트폰 모바일 식권:<br>근로자를 위한 신속 결제 QR
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          별도의 카드 발급 비용 없이 개인 스마트폰의 브라우저를 통해 실시간 식권을 생성하는 모바일 웹앱입니다.
+        </p>
+        <div class="flex flex-col gap-3 mt-1">
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+            <span class="text-xs text-slate-300"><strong>편리한 본인인증:</strong> 등록된 휴대전화 번호 입력만으로 본인의 디지털 지갑 연동</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+            <span class="text-xs text-slate-300"><strong>실시간 포인트 모니터링:</strong> 금일 사용한 포인트와 식사 가능한 잔여 포인트 직관적 표시</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+            <span class="text-xs text-slate-300"><strong>개인 식사 기록 조회:</strong> 본인이 당일 먹은 메뉴 리스트와 방문 식당 이름 정보 제공</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+            <span class="text-xs text-slate-300"><strong>보안성 극대화:</strong> 30초마다 보안 난수가 덧붙여져 재생성되는 동적 일회용 QR 결제 기술</span>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <div class="relative group cursor-pointer border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900/80 max-h-[460px] flex items-center justify-center" onclick="zoomImage('./images/mobile_worker_logged_in.png')">
+          <img src="./images/mobile_worker_logged_in.png" alt="인부 모바일 식권 화면" class="w-full h-auto object-contain">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm backdrop-blur-xs">
+            🔍 클릭하여 이미지 확대
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 6. 근로자 모바일 폰에 표시되는 실시간 잔액 및 보안 OTP QR 코드 화면</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 8: KITCHEN KDS ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-center" id="slide-7">
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <span class="text-sm font-bold text-blue-500 font-mono">07. KITCHEN KDS MONITOR</span>
+        <h2 class="text-3xl font-black text-white tracking-tight leading-snug">
+          주방 KDS 모니터:<br>실시간 주문 접수 및 조리 관리
+        </h2>
+        <p class="text-sm text-slate-400 leading-relaxed">
+          카운터 결제와 동시에 주방용 터치 모니터에 자동 접수되어 종이 주문서 없이 빠르게 조리 및 서빙을 돕는 주방 도구입니다.
+        </p>
+        <div class="flex flex-col gap-3 mt-1">
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span class="text-xs text-slate-300"><strong>조리 시간 타이머:</strong> 주문 직후부터 누적 초 단위 시간 표시로 신속도 모니터링</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span class="text-xs text-slate-300"><strong>3분 초과 조리 지연 알림:</strong> 주문 접수 후 3분이 초과되면 모니터 카드가 점멸 경고하여 조리 누락 예방</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span class="text-xs text-slate-300"><strong>조리 완료(Complete) 터치:</strong> 주방 이모님들이 모니터를 터치하면 즉시 대기 현황판에 호출 안내</span>
+          </div>
+          <div class="flex gap-3 items-center">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span class="text-xs text-slate-300"><strong>영수증 번호 자동 매칭:</strong> 수동 매치 오류 없이 근로자의 번호와 주문 번호가 100% 매핑되어 출고 오류 차단</span>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 flex flex-col justify-center items-center">
+        <div class="relative group cursor-pointer border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900/80 max-h-[460px] flex items-center justify-center" onclick="zoomImage('./images/kitchen_kds_queue.png')">
+          <img src="./images/kitchen_kds_queue.png" alt="주방 KDS 화면" class="w-full h-auto object-contain">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm backdrop-blur-xs">
+            🔍 클릭하여 이미지 확대
+          </div>
+        </div>
+        <span class="text-xs text-slate-500 mt-2 font-mono">▲ 그림 7. 각 매장 주방에 설치된 조리 대기 시간 및 실시간 대기열 모니터</span>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 9: EXPECTED EFFECTS ==================== -->
+    <div class="slide absolute w-full max-w-7xl h-full hidden flex flex-col justify-center items-center text-center px-4" id="slide-8">
+      <span class="text-sm font-bold text-blue-500 font-mono mb-2">08. EXPECTED EFFECTS</span>
+      <h2 class="text-4xl font-black text-white tracking-tight leading-snug mb-8">
+        유림푸드 F&B 타운 ERP 도입 기대 효과
+      </h2>
+      <p class="text-slate-400 max-w-2xl text-sm leading-relaxed mb-10">
+        시스템 전면 도입 후 수치로 검증될 예정인 정산 가속화 및 F&B 타운 입점 점주님들의 원가 절감 효과입니다.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-5xl w-full">
+        <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl">
+          <div class="text-blue-500 font-black text-4xl mb-2">95%</div>
+          <div class="text-xs font-bold text-slate-200 mb-1">수기 정산 행정 공수 감축</div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">매달 종이 장부를 대조하고 수작업으로 청구하던 시간이 실시간 B2B 결제 포인트 정산 시스템으로 자동화되어 업무 극대화</p>
+        </div>
+        <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl">
+          <div class="text-emerald-500 font-black text-4xl mb-2">20%</div>
+          <div class="text-xs font-bold text-slate-200 mb-1">식자재 구매 원가 절감</div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">식봄 SCM 연동을 통한 식당 통합 발주로 대량 할인 네고 조건을 달성하여 식자재 단가를 파격적으로 인하</p>
+        </div>
+        <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl">
+          <div class="text-indigo-500 font-black text-4xl mb-2">15%</div>
+          <div class="text-xs font-bold text-slate-200 mb-1">타운 통합 인건비 효율 증대</div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">피크 시간대 매장별 근무 인력을 AI 및 최고 관리자가 분석하여 한가한 매장에서 바쁜 매장으로 즉각 교차 배치 지원</p>
+        </div>
+        <div class="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl">
+          <div class="text-purple-500 font-black text-4xl mb-2">100%</div>
+          <div class="text-xs font-bold text-slate-200 mb-1">미납 연체 및 공실 모니터링</div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">월세 미납 매장에 대해 버튼 클릭 한 번으로 모바일 독촉장을 송부하고 공실은 즉각 마케팅 상태로 전환하여 관리 사각 차단</p>
+        </div>
+      </div>
+
+      <div class="mt-12 p-4 bg-blue-950/20 border border-blue-900/30 rounded-xl max-w-2xl text-left">
+        <p class="text-xs text-blue-300 leading-relaxed font-medium">
+          <strong>대표님께 드리는 코다리 개발부장의 총평:</strong><br>
+          "불필요한 IoT 센서 연동처럼 시스템 관리 부담만 늘리는 장치들은 제외하고, 1원 단위 B2B 정산 포인트화와 대량 공동구매 원가 절감 같은 '진짜 돈이 되는' 핵심 비즈니스 로직에 집중하여 완성도를 극대화했습니다. 총괄사장 함용운 선배님께서도 분명 기뻐하시고 만족하실 핵심 기능들입니다!"
+        </p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM FOOTER & CONTROLS -->
+  <footer class="w-full px-8 py-4 bg-slate-900/50 border-t border-slate-800/80 backdrop-blur-md flex justify-between items-center z-10">
+    <div class="flex items-center gap-2">
+      <button onclick="prevSlide()" class="p-2 border border-slate-700 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 hover:text-white transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button onclick="nextSlide()" class="p-2 border border-slate-700 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 hover:text-white transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+      <span class="text-xs font-mono text-slate-400 ml-2">
+        Slide <span id="current-slide-num" class="font-bold text-white">1</span> of <span id="total-slides-num" class="text-slate-500">9</span>
+      </span>
+    </div>
+
+    <!-- PROGRESS BAR -->
+    <div class="flex-1 max-w-lg mx-6 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+      <div id="slide-progress" class="bg-gradient-to-r from-blue-500 to-indigo-500 h-full w-[11.1%] transition-all duration-300"></div>
+    </div>
+
+    <div>
+      <span class="text-xs font-mono text-slate-500">© 2026 YULIM FOOD. All Rights Reserved.</span>
+    </div>
+  </footer>
+
+  <!-- IMAGE ZOOM MODAL -->
+  <div id="zoom-modal" class="fixed inset-0 z-50 bg-slate-950/90 hidden items-center justify-center p-6 backdrop-blur-md cursor-pointer transition-all duration-300" onclick="closeZoom()">
+    <div class="relative max-w-5xl max-h-full flex items-center justify-center">
+      <img id="zoom-img" src="" alt="확대 이미지" class="max-w-full max-h-[85vh] rounded-xl border border-slate-800 shadow-2xl object-contain">
+      <div class="absolute -top-10 right-0 text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2">
+        <span>클릭하여 닫기</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    let currentSlide = 0;
+
+    // Set total slide counter
+    document.getElementById('total-slides-num').innerText = totalSlides;
+
+    function updateSlide() {
+      // Hide all slides
+      slides.forEach((slide, idx) => {
+        if (idx === currentSlide) {
+          slide.classList.remove('hidden');
+          slide.classList.add('slide-active');
+          slide.classList.remove('slide-exit');
+        } else {
+          slide.classList.add('hidden');
+          slide.classList.remove('slide-active');
+        }
+      });
+
+      // Update counters & progress
+      document.getElementById('current-slide-num').innerText = currentSlide + 1;
+      const progressPercent = ((currentSlide + 1) / totalSlides) * 100;
+      document.getElementById('slide-progress').style.width = progressPercent + '%';
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    // Key listener
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      } else if (e.key === 'Escape') {
+        closeZoom();
+      }
+    });
+
+    // Image Zoom functionality
+    function zoomImage(src) {
+      const modal = document.getElementById('zoom-modal');
+      const img = document.getElementById('zoom-img');
+      img.src = src;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeZoom() {
+      const modal = document.getElementById('zoom-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // Initialize slide view
+    updateSlide();
+  </script>
+</body>
+</html>

@@ -44,7 +44,7 @@ def run_simulation():
         phone_input.send_keys("010-5555-4444")
         time.sleep(1)
         
-        grant_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), '일일 3식 권한 부여')]")))
+        grant_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), '일일 25,000 P 권한 부여')]")))
         grant_btn.click()
         time.sleep(1)
         

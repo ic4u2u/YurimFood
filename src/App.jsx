@@ -39,8 +39,6 @@ export default function App() {
     iot,
     buildings,
     kitchenOrders,
-    coldChainTemp,
-    setColdChainTemp,
     totalSavings,
     addSCMOrder,
     addBulkSCMOrders,
@@ -59,7 +57,14 @@ export default function App() {
     resetToInitial
   } = useContext(ERPContext);
 
-  const [role, setRole] = useState('Super_Admin'); // Super_Admin, Client_B2B, Store_Manager
+  const [role, setRole] = useState('Login'); // Login, Super_Admin, Client_B2B, Store_Manager, Worker_Mobile, Kitchen_KDS
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [selectedLoginRole, setSelectedLoginRole] = useState('Super_Admin');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginCompanyId, setLoginCompanyId] = useState('c4');
+  const [loginStoreName, setLoginStoreName] = useState('양평신내서울해장국');
+  const [loginWorkerPhone, setLoginWorkerPhone] = useState('');
+  const [loginKdsStoreName, setLoginKdsStoreName] = useState('양평신내서울해장국');
   const [theme, setTheme] = useState('dark'); // dark, light
   const [superScmTab, setSuperScmTab] = useState('consolidated'); // consolidated, individual
   const [negoResultModal, setNegoResultModal] = useState(null); // null or { savings, message }
@@ -115,6 +120,13 @@ export default function App() {
   const [scmPrice, setScmPrice] = useState('');
   const [scmUnit, setScmUnit] = useState('개');
   const [cart, setCart] = useState([]);
+
+  // KPI Detail States
+  const [activeKpiDetail, setActiveKpiDetail] = useState(null); // null, sales, b2b, labor, lease
+  const [isLaborCoordinating, setIsLaborCoordinating] = useState(false);
+  const [laborMsg, setLaborMsg] = useState('');
+  const [rechargeAmounts, setRechargeAmounts] = useState({});
+  const [recruitingStatus, setRecruitingStatus] = useState({ b3: 'active' });
 
   const handleQtyChange = (itemId, val) => {
     let num = parseInt(val, 10);
@@ -504,38 +516,193 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Active Role Info Suffix Badge */}
+          {isLoggedIn && (
+            <span className="text-[10px] font-black tracking-wide text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900/50 px-2.5 py-1.5 rounded-lg border border-zinc-200/50 dark:border-zinc-800/50 flex items-center gap-1.5 font-mono shadow-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              {role === 'Super_Admin' && '👑 최고 관리자'}
+              {role === 'Client_B2B' && `🤝 B2B [${activeCompany.name.split(' ')[0]}]`}
+              {role === 'Store_Manager' && `🖥️ POS [${selectedStore.substring(0, 5)}]`}
+              {role === 'Worker_Mobile' && `📱 근로자 [${loggedInWorker ? loggedInWorker.name : '미인증'}]`}
+              {role === 'Kitchen_KDS' && `👨‍🍳 주방 [${selectedKdsStore.substring(0, 5)}]`}
+            </span>
+          )}
+
           {/* Active Role Selector Tab */}
           <div className="bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg flex gap-1 border border-zinc-200/50 dark:border-zinc-800/50">
-            <button 
-              onClick={() => setRole('Super_Admin')} 
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Super_Admin' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
-            >
-              Super Admin
-            </button>
-            <button 
-              onClick={() => setRole('Client_B2B')} 
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Client_B2B' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
-            >
-              B2B Portal (식권대장)
-            </button>
-            <button 
-              onClick={() => setRole('Store_Manager')} 
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Store_Manager' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
-            >
-              Store POS & Scanner
-            </button>
-            <button 
-              onClick={() => setRole('Worker_Mobile')} 
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Worker_Mobile' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
-            >
-              인부 모바일 식권
-            </button>
-            <button 
-              onClick={() => setRole('Kitchen_KDS')} 
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Kitchen_KDS' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
-            >
-              주방 KDS 모니터
-            </button>
+            {/* Super Admin */}
+            <div className="relative group">
+              <button 
+                onClick={() => { setRole('Super_Admin'); setIsLoggedIn(true); }} 
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Super_Admin' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
+              >
+                Super Admin
+              </button>
+              
+              {/* Tooltip Popup */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
+                <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                  <Building2 className="w-4 h-4" /> 최고 관리자 (Super Admin) 사용방법
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                  F&B 타운 전체의 자금 흐름과 프롭테크 임대 정보를 총괄하는 최고 관리 권한입니다.
+                </p>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                  <div className="flex items-start gap-1">
+                    <span className="text-blue-500 font-bold">•</span>
+                    <span>식당별 매출 기여도 및 점심 시간대 식수 그래프 모니터링</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-blue-500 font-bold">•</span>
+                    <span>6개동 임대료 수납 관리 및 연체 매장 독촉장 즉시 발송</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-blue-500 font-bold">•</span>
+                    <span>식봄 SCM 연동을 통한 식자재 공동구매 승인/네고</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-blue-500 font-bold">•</span>
+                    <span>B2B 세금계산서 가상 발행 및 정산 엑셀 다운로드</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* B2B Portal */}
+            <div className="relative group">
+              <button 
+                onClick={() => { setRole('Client_B2B'); setIsLoggedIn(true); }} 
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Client_B2B' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
+              >
+                B2B Portal (식권대장)
+              </button>
+              
+              {/* Tooltip Popup */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
+                <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                  <Users className="w-4 h-4" /> B2B Portal 사용방법
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                  협력 건설사가 근로자들의 장부 식권을 배포하고 정산하는 관리 페이지입니다.
+                </p>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                  <div className="flex items-start gap-1">
+                    <span className="text-indigo-500 font-bold">•</span>
+                    <span>선불 예치금 가상계좌 발급 및 입금 충전 시뮬레이션</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-indigo-500 font-bold">•</span>
+                    <span>소속 근로자 등록 및 일일 25,000 P 포인트 식권 즉시 발급</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-indigo-500 font-bold">•</span>
+                    <span>소속 근로자들의 실시간 식사 이력(메뉴, 가격, 일시) 모니터링</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Store Manager */}
+            <div className="relative group">
+              <button 
+                onClick={() => { setRole('Store_Manager'); setIsLoggedIn(true); }} 
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Store_Manager' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
+              >
+                Store POS & Scanner
+              </button>
+              
+              {/* Tooltip Popup */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
+                <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <ShoppingBag className="w-4 h-4" /> Store POS 사용방법
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                  F&B 타운 입점 식당 카운터에서 식사 결제를 승인하고 식자재를 발주하는 화면입니다.
+                </p>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                  <div className="flex items-start gap-1">
+                    <span className="text-emerald-500 font-bold">•</span>
+                    <span>결제 처리할 판매 메뉴 선택 및 근로자 OTP QR 스캔 결제</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-emerald-500 font-bold">•</span>
+                    <span>동일 QR 코드의 30초 내 중복 결제를 차단하는 보안 검증</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-emerald-500 font-bold">•</span>
+                    <span>식자재 도매 카탈로그(식봄)를 통한 실시간 발주 신청</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Worker Mobile */}
+            <div className="relative group">
+              <button 
+                onClick={() => { setRole('Worker_Mobile'); setIsLoggedIn(true); }} 
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Worker_Mobile' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
+              >
+                인부 모바일 식권
+              </button>
+              
+              {/* Tooltip Popup */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
+                <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                  <QrCode className="w-4 h-4" /> Worker Mobile 사용방법
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                  현장 근로자가 스마트폰으로 식사를 인증하는 모바일 웹 앱 화면입니다.
+                </p>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                  <div className="flex items-start gap-1">
+                    <span className="text-purple-500 font-bold">•</span>
+                    <span>사전 등록된 전화번호 입력을 통한 보안 로그인</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-purple-500 font-bold">•</span>
+                    <span>30초마다 자동 갱신 및 난수가 붙는 일회용 OTP QR 생성</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-purple-500 font-bold">•</span>
+                    <span>오늘 식사 잔여 포인트 및 개인 식사 기록 실시간 확인</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Kitchen KDS */}
+            <div className="relative group">
+              <button 
+                onClick={() => { setRole('Kitchen_KDS'); setIsLoggedIn(true); }} 
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Kitchen_KDS' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
+              >
+                주방 KDS 모니터
+              </button>
+              
+              {/* Tooltip Popup */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
+                <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                  <Flame className="w-4 h-4" /> Kitchen KDS 사용방법
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                  각 식당 주방에 설치되어 실시간 주문 조리 현황을 관리하는 모니터입니다.
+                </p>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                  <div className="flex items-start gap-1">
+                    <span className="text-rose-500 font-bold">•</span>
+                    <span>POS/모바일 결제 시 주문서 실시간 연동 접수</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-rose-500 font-bold">•</span>
+                    <span>주문 경과 시간 실시간 표시 (3분 초과 시 지연 경고 점멸)</span>
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-rose-500 font-bold">•</span>
+                    <span>조리 완료 처리 시 해당 근로자 호출 알림</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Theme Toggle */}
@@ -543,7 +710,7 @@ export default function App() {
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="p-2 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
           >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-zinc-400" />}
           </button>
 
           {/* System Reset */}
@@ -554,6 +721,22 @@ export default function App() {
           >
             <RefreshCw className="w-5 h-5" />
           </button>
+
+          {/* Logout Button */}
+          {isLoggedIn && (
+            <button 
+              onClick={() => {
+                setIsLoggedIn(false);
+                setRole('Login');
+                setLoggedInWorker(null);
+              }}
+              className="p-2 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 transition-all font-bold text-xs flex items-center gap-1"
+              title="로그아웃"
+            >
+              <X className="w-4 h-4" />
+              <span>로그아웃</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -563,30 +746,498 @@ export default function App() {
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-6 flex flex-col gap-6">
         
         {/* ROLE INFO HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                {role === 'Super_Admin' ? '건물주 / 총괄 관리자 모드' : 
-                 role === 'Client_B2B' ? '협력 건설사 장부 관리 포털' : 
-                 role === 'Store_Manager' ? '매장 POS 및 식자재 발주 연동' :
-                 role === 'Worker_Mobile' ? '현장 근로자용 모바일 식권 앱' : '식당 주방 주문 KDS 모니터'}
-              </span>
+        {role !== 'Login' && (
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  {role === 'Super_Admin' ? '건물주 / 총괄 관리자 모드' : 
+                   role === 'Client_B2B' ? '협력 건설사 장부 관리 포털' : 
+                   role === 'Store_Manager' ? '매장 POS 및 식자재 발주 연동' :
+                   role === 'Worker_Mobile' ? '현장 근로자용 모바일 식권 앱' : '식당 주방 주문 KDS 모니터'}
+                </span>
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight">
+                {role === 'Super_Admin' ? 'F&B 타운 전사적 자원 관리 대시보드' : 
+                 role === 'Client_B2B' ? 'B2B 달장부 잔액 및 식수 정산 관리' : 
+                 role === 'Store_Manager' ? `${selectedStore} 태블릿 POS 카운터` :
+                 role === 'Worker_Mobile' ? '내 스마트폰 모바일 식권' : `${selectedKdsStore} 주방 KDS 화면`}
+              </h2>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight">
-              {role === 'Super_Admin' ? 'F&B 타운 전사적 자원 관리 대시보드' : 
-               role === 'Client_B2B' ? 'B2B 달장부 잔액 및 식수 정산 관리' : 
-               role === 'Store_Manager' ? `${selectedStore} 태블릿 POS 카운터` :
-               role === 'Worker_Mobile' ? '내 스마트폰 모바일 식권' : `${selectedKdsStore} 주방 KDS 화면`}
-            </h2>
+            
+            <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950 px-4 py-2.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 text-sm">
+              <MapPin className="w-4 h-4 text-blue-500" />
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300 font-mono">현장: 용인 하이닉스 반도체 건설 기지 배후</span>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950 px-4 py-2.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 text-sm">
-            <MapPin className="w-4 h-4 text-blue-500" />
-            <span className="font-semibold text-zinc-700 dark:text-zinc-300 font-mono">현장: 용인 하이닉스 반도체 건설 기지 배후</span>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* VIEW 0: LOGIN PORTAL */}
+        {/* ---------------------------------------------------- */}
+        {role === 'Login' && (
+          <div className="max-w-4xl w-full mx-auto my-auto p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl flex flex-col gap-8 animate-fadeIn">
+            <div className="text-center flex flex-col gap-2">
+              <div className="mx-auto p-3 bg-blue-600 rounded-2xl text-white w-max shadow-lg shadow-blue-500/20">
+                <Building2 className="w-8 h-8" />
+              </div>
+              <h2 className="text-3xl font-black tracking-tight mt-2 bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-indigo-300 bg-clip-text text-transparent">
+                유림푸드 F&B 타운 통합 ERP
+              </h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">
+                부서 및 권한별 시스템 로그인을 위해 아래의 역할을 선택해 주세요.
+              </p>
+            </div>
+            
+            {/* Role Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {/* Super Admin */}
+              <div className="relative group/card">
+                <div 
+                  onClick={() => {
+                    setSelectedLoginRole('Super_Admin');
+                    setLoginPassword('');
+                  }}
+                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center justify-between h-40 text-center ${
+                    selectedLoginRole === 'Super_Admin'
+                      ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/15'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700 hover:scale-[1.02]'
+                  }`}
+                >
+                  <div className="p-3 bg-blue-600 rounded-xl text-white">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Super Admin</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">최고 관리자</p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                    F&B 타운 총괄
+                  </span>
+                </div>
+                
+                {/* Tooltip Popup */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
+                  <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                    <Building2 className="w-4 h-4" /> 최고 관리자 (Super Admin) 사용방법
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
+                    F&B 타운 전체의 자금 흐름과 프롭테크 임대 정보를 총괄하는 최고 관리 권한입니다.
+                  </p>
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                    <div className="flex items-start gap-1">
+                      <span className="text-blue-500 font-bold">•</span>
+                      <span>식당별 매출 기여도 및 점심 시간대 식수 그래프 모니터링</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-blue-500 font-bold">•</span>
+                      <span>6개동 임대료 수납 관리 및 연체 매장 독촉장 즉시 발송</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-blue-500 font-bold">•</span>
+                      <span>식봄 SCM 연동을 통한 식자재 공동구매 승인/네고</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-blue-500 font-bold">•</span>
+                      <span>B2B 세금계산서 가상 발행 및 정산 엑셀 다운로드</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* B2B Portal */}
+              <div className="relative group/card">
+                <div 
+                  onClick={() => {
+                    setSelectedLoginRole('Client_B2B');
+                    setLoginPassword('');
+                  }}
+                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center justify-between h-40 text-center ${
+                    selectedLoginRole === 'Client_B2B'
+                      ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/15'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700 hover:scale-[1.02]'
+                  }`}
+                >
+                  <div className="p-3 bg-indigo-600 rounded-xl text-white">
+                    <Users className="w-6 h-6 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">B2B Portal</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">건설사 식권대장</p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded">
+                    식수 정산 관리
+                  </span>
+                </div>
+                
+                {/* Tooltip Popup */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
+                  <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                    <Users className="w-4 h-4" /> B2B Portal 사용방법
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
+                    협력 건설사가 근로자들의 장부 식권을 배포하고 정산하는 관리 페이지입니다.
+                  </p>
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                    <div className="flex items-start gap-1">
+                      <span className="text-indigo-500 font-bold">•</span>
+                      <span>선불 예치금 가상계좌 발급 및 입금 충전 시뮬레이션</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-indigo-500 font-bold">•</span>
+                      <span>소속 근로자 등록 및 일일 25,000 P 포인트 식권 즉시 발급</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-indigo-500 font-bold">•</span>
+                      <span>소속 근로자들의 실시간 식사 이력(메뉴, 가격, 일시) 모니터링</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Store POS */}
+              <div className="relative group/card">
+                <div 
+                  onClick={() => {
+                    setSelectedLoginRole('Store_Manager');
+                    setLoginPassword('');
+                  }}
+                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center justify-between h-40 text-center ${
+                    selectedLoginRole === 'Store_Manager'
+                      ? 'border-emerald-500 bg-emerald-500/10 shadow-lg shadow-emerald-500/15'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700 hover:scale-[1.02]'
+                  }`}
+                >
+                  <div className="p-3 bg-emerald-600 rounded-xl text-white">
+                    <ShoppingBag className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Store POS</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">식당 포스기</p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
+                    식사 결제/발주
+                  </span>
+                </div>
+                
+                {/* Tooltip Popup */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
+                  <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <ShoppingBag className="w-4 h-4" /> Store POS 사용방법
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
+                    F&B 타운 입점 식당 카운터에서 식사 결제를 승인하고 식자재를 발주하는 화면입니다.
+                  </p>
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                    <div className="flex items-start gap-1">
+                      <span className="text-emerald-500 font-bold">•</span>
+                      <span>결제 처리할 판매 메뉴 선택 및 근로자 OTP QR 스캔 결제</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-emerald-500 font-bold">•</span>
+                      <span>동일 QR 코드의 30초 내 중복 결제를 차단하는 보안 검증</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-emerald-500 font-bold">•</span>
+                      <span>식자재 도매 카탈로그(식봄)를 통한 실시간 발주 신청</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Worker Mobile */}
+              <div className="relative group/card">
+                <div 
+                  onClick={() => {
+                    setSelectedLoginRole('Worker_Mobile');
+                    setLoginWorkerPhone('');
+                  }}
+                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center justify-between h-40 text-center ${
+                    selectedLoginRole === 'Worker_Mobile'
+                      ? 'border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/15'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700 hover:scale-[1.02]'
+                  }`}
+                >
+                  <div className="p-3 bg-purple-600 rounded-xl text-white">
+                    <QrCode className="w-6 h-6 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Worker Mobile</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">근로자 식권 앱</p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">
+                    OTP QR 모바일 식권
+                  </span>
+                </div>
+                
+                {/* Tooltip Popup */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
+                  <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                    <QrCode className="w-4 h-4" /> Worker Mobile 사용방법
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
+                    현장 근로자가 스마트폰으로 식사를 인증하는 모바일 웹 앱 화면입니다.
+                  </p>
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                    <div className="flex items-start gap-1">
+                      <span className="text-purple-500 font-bold">•</span>
+                      <span>사전 등록된 전화번호 입력을 통한 보안 로그인</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-purple-500 font-bold">•</span>
+                      <span>30초마다 자동 갱신 및 난수가 붙는 일회용 OTP QR 생성</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-purple-500 font-bold">•</span>
+                      <span>오늘 식사 잔여 포인트 및 개인 식사 기록 실시간 확인</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kitchen KDS */}
+              <div className="relative group/card">
+                <div 
+                  onClick={() => {
+                    setSelectedLoginRole('Kitchen_KDS');
+                  }}
+                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center justify-between h-40 text-center ${
+                    selectedLoginRole === 'Kitchen_KDS'
+                      ? 'border-rose-500 bg-rose-500/10 shadow-lg shadow-rose-500/15'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700 hover:scale-[1.02]'
+                  }`}
+                >
+                  <div className="p-3 bg-rose-600 rounded-xl text-white">
+                    <Flame className="w-6 h-6 text-rose-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Kitchen KDS</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">주방 오더 모니터</p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded">
+                    실시간 주문 접수
+                  </span>
+                </div>
+                
+                {/* Tooltip Popup */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
+                  <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                    <Flame className="w-4 h-4" /> Kitchen KDS 사용방법
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
+                    각 식당 주방에 설치되어 실시간 주문 조리 현황을 관리하는 모니터입니다.
+                  </p>
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
+                    <div className="flex items-start gap-1">
+                      <span className="text-rose-500 font-bold">•</span>
+                      <span>POS/모바일 결제 시 주문서 실시간 연동 접수</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-rose-500 font-bold">•</span>
+                      <span>주문 경과 시간 실시간 표시 (3분 초과 시 지연 경고 점멸)</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-rose-500 font-bold">•</span>
+                      <span>조리 완료 처리 시 해당 근로자 호출 알림</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Login Form Panel */}
+            <div className="bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-6 shadow-inner transition-all duration-300">
+              {/* Super Admin Form */}
+              {selectedLoginRole === 'Super_Admin' && (
+                <div className="flex flex-col gap-4 animate-fadeIn">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">최고 관리자 비밀번호</label>
+                    <input 
+                      type="password"
+                      placeholder="비밀번호 입력 (데모: 1234 또는 admin)"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:text-zinc-100"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (loginPassword === '1234' || loginPassword === 'admin' || loginPassword === '') {
+                        setRole('Super_Admin');
+                        setIsLoggedIn(true);
+                      } else {
+                        alert('비밀번호가 올바르지 않습니다. (데모 비밀번호: 1234 또는 admin)');
+                      }
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
+                  >
+                    최고 관리자 로그인
+                  </button>
+                </div>
+              )}
+
+              {/* B2B Portal Form */}
+              {selectedLoginRole === 'Client_B2B' && (
+                <div className="flex flex-col gap-4 animate-fadeIn">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">협력사 선택</label>
+                      <select 
+                        value={loginCompanyId}
+                        onChange={(e) => setLoginCompanyId(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none dark:text-zinc-100 font-bold"
+                      >
+                        {companies.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">비밀번호</label>
+                      <input 
+                        type="password"
+                        placeholder="비밀번호 입력 (데모: 1234)"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-zinc-100"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSelectedCompanyId(loginCompanyId);
+                      setRole('Client_B2B');
+                      setIsLoggedIn(true);
+                    }}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/20"
+                  >
+                    B2B 달장부 포털 로그인
+                  </button>
+                </div>
+              )}
+
+              {/* Store POS Form */}
+              {selectedLoginRole === 'Store_Manager' && (
+                <div className="flex flex-col gap-4 animate-fadeIn">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">매장 선택</label>
+                      <select 
+                        value={loginStoreName}
+                        onChange={(e) => setLoginStoreName(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none dark:text-zinc-100 font-bold"
+                      >
+                        <option value="양평신내서울해장국">양평신내서울해장국 (한식)</option>
+                        <option value="유림푸드 중화식당">유림푸드 중화식당 (중식)</option>
+                        <option value="삼계탕&염소탕">삼계탕&염소탕 (보양식)</option>
+                        <option value="장어&고기">장어&고기 (고기류)</option>
+                        <option value="분식집">분식집 (분식)</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">POS 패스코드</label>
+                      <input 
+                        type="password"
+                        placeholder="패스코드 입력 (데모: 1234)"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-zinc-100"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSelectedStore(loginStoreName);
+                      setRole('Store_Manager');
+                      setIsLoggedIn(true);
+                    }}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20"
+                  >
+                    매장 태블릿 POS 로그인
+                  </button>
+                </div>
+              )}
+
+              {/* Worker Mobile Form */}
+              {selectedLoginRole === 'Worker_Mobile' && (
+                <div className="flex flex-col gap-4 animate-fadeIn">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">전화번호 직접 입력</label>
+                      <input 
+                        type="text"
+                        placeholder="010-XXXX-XXXX"
+                        value={loginWorkerPhone}
+                        onChange={(e) => setLoginWorkerPhone(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-mono dark:text-zinc-100"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">데모용 빠른 계정 선택 (선택 시 자동 입력)</label>
+                      <select 
+                        value={loginWorkerPhone}
+                        onChange={(e) => setLoginWorkerPhone(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none font-bold dark:text-zinc-100"
+                      >
+                        <option value="">-- 근로자 선택 --</option>
+                        {workers.map(w => (
+                          <option key={w.id} value={w.phone}>{w.name} ({w.companyName.split(' ')[0]}) - {w.phone}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const found = workers.find(w => w.phone.trim() === loginWorkerPhone.trim());
+                      if (found) {
+                        setLoggedInWorker(found);
+                        setLoginPhone(loginWorkerPhone.trim());
+                        setRole('Worker_Mobile');
+                        setIsLoggedIn(true);
+                      } else {
+                        alert('등록되지 않은 전화번호입니다. B2B 포털에서 먼저 근로자를 등록하시거나, 데모용 빠른 선택 목록에서 선택해 주세요.');
+                      }
+                    }}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-3.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-purple-500/20"
+                  >
+                    근로자 모바일 식권 앱 로그인
+                  </button>
+                </div>
+              )}
+
+              {/* Kitchen KDS Form */}
+              {selectedLoginRole === 'Kitchen_KDS' && (
+                <div className="flex flex-col gap-4 animate-fadeIn">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">주방 선택</label>
+                    <select 
+                      value={loginKdsStoreName}
+                      onChange={(e) => setLoginKdsStoreName(e.target.value)}
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none dark:text-zinc-100 font-bold"
+                    >
+                      <option value="양평신내서울해장국">양평신내서울해장국 (한식 주방)</option>
+                      <option value="유림푸드 중화식당">유림푸드 중화식당 (중식 주방)</option>
+                      <option value="삼계탕&염소탕">삼계탕&염소탕 (보양식 주방)</option>
+                      <option value="장어&고기">장어&고기 (고기류 주방)</option>
+                      <option value="분식집">분식집 (분식 주방)</option>
+                    </select>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSelectedKdsStore(loginKdsStoreName);
+                      setRole('Kitchen_KDS');
+                      setIsLoggedIn(true);
+                    }}
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
+                  >
+                    주방 KDS 모니터 가동
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ---------------------------------------------------- */}
         {/* VIEW 1: SUPER_ADMIN */}
@@ -596,7 +1247,14 @@ export default function App() {
             
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+              <div 
+                onClick={() => setActiveKpiDetail(prev => prev === 'sales' ? null : 'sales')}
+                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
+                  activeKpiDetail === 'sales' 
+                    ? 'border-emerald-500 ring-2 ring-emerald-500 bg-emerald-50/5 dark:bg-emerald-950/10' 
+                    : 'border-zinc-200 dark:border-zinc-800'
+                }`}
+              >
                 <div>
                   <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
                     <span className="text-sm font-medium">금일 타운 총매출액</span>
@@ -614,7 +1272,14 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+              <div 
+                onClick={() => setActiveKpiDetail(prev => prev === 'b2b' ? null : 'b2b')}
+                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
+                  activeKpiDetail === 'b2b' 
+                    ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-50/5 dark:bg-blue-950/10' 
+                    : 'border-zinc-200 dark:border-zinc-800'
+                }`}
+              >
                 <div>
                   <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
                     <span className="text-sm font-medium">B2B 식권 총 선불 예치금</span>
@@ -630,7 +1295,14 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+              <div 
+                onClick={() => setActiveKpiDetail(prev => prev === 'labor' ? null : 'labor')}
+                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
+                  activeKpiDetail === 'labor' 
+                    ? 'border-amber-500 ring-2 ring-amber-500 bg-amber-50/5 dark:bg-amber-950/10' 
+                    : 'border-zinc-200 dark:border-zinc-800'
+                }`}
+              >
                 <div>
                   <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
                     <span className="text-sm font-medium">6개 동 통합 인건비 효율</span>
@@ -646,7 +1318,14 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+              <div 
+                onClick={() => setActiveKpiDetail(prev => prev === 'lease' ? null : 'lease')}
+                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
+                  activeKpiDetail === 'lease' 
+                    ? 'border-purple-500 ring-2 ring-purple-500 bg-purple-50/5 dark:bg-purple-950/10' 
+                    : 'border-zinc-200 dark:border-zinc-800'
+                }`}
+              >
                 <div>
                   <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
                     <span className="text-sm font-medium">상층부 임대 및 공실률</span>
@@ -662,6 +1341,453 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* KPI Drilldown Detail Panel (Top-down Collapsible) */}
+            {activeKpiDetail && (
+              <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md animate-fadeIn flex flex-col gap-6">
+                
+                {/* 1. SALES DETAIL PANEL */}
+                {activeKpiDetail === 'sales' && (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                      <div>
+                        <h4 className="text-base font-bold flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                          <TrendingUp className="w-5 h-5" />
+                          금일 타운 매출 상세 분석 (실시간)
+                        </h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                          타운 내 각 매장의 오늘 매출 기여도와 실시간 결제 분포입니다.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveKpiDetail(null)}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">오늘 총 매출</span>
+                        <div className="text-xl font-bold font-mono mt-1 text-emerald-600 dark:text-emerald-400">
+                          {sales.reduce((acc, c) => acc + c.amount, 0).toLocaleString()}원
+                        </div>
+                      </div>
+                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">B2B 식권 결제 건수</span>
+                        <div className="text-xl font-bold font-mono mt-1 text-blue-500">
+                          {sales.filter(s => s.paymentType === 'B2B Coupon').length}건
+                        </div>
+                      </div>
+                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">일반 고객 결제 건수</span>
+                        <div className="text-xl font-bold font-mono mt-1 text-amber-500">
+                          {sales.filter(s => s.paymentType === 'General').length}건
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
+                            <th className="py-3 font-semibold">상점명</th>
+                            <th className="py-3 font-semibold text-right">오늘 총 매출액</th>
+                            <th className="py-3 font-semibold text-center">총 결제 건수</th>
+                            <th className="py-3 font-semibold text-center">B2B 식권</th>
+                            <th className="py-3 font-semibold text-center">일반 결제</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { name: '양평신내서울해장국', color: '#ef4444' },
+                            { name: '유림푸드 중화식당', color: '#3b82f6' },
+                            { name: '분식집', color: '#f59e0b' },
+                            { name: '삼계탕&염소탕', color: '#10b981' },
+                            { name: '장어&고기', color: '#8b5cf6' },
+                            { name: 'CU 편의점', color: '#ec4899' }
+                          ].map(store => {
+                            const storeSales = sales.filter(s => s.storeName === store.name);
+                            const totalAmount = storeSales.reduce((sum, s) => sum + s.amount, 0);
+                            const txCount = storeSales.length;
+                            const b2bCount = storeSales.filter(s => s.paymentType === 'B2B Coupon').length;
+                            const generalCount = storeSales.filter(s => s.paymentType === 'General').length;
+
+                            return (
+                              <tr key={store.name} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
+                                <td className="py-3 font-bold flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: store.color }}></span>
+                                  {store.name}
+                                </td>
+                                <td className="py-3 text-right font-bold font-mono">{totalAmount.toLocaleString()}원</td>
+                                <td className="py-3 text-center font-mono">{txCount}건</td>
+                                <td className="py-3 text-center text-blue-500 font-mono font-bold">{b2bCount}건</td>
+                                <td className="py-3 text-center text-amber-500 font-mono font-bold">{generalCount}건</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mt-4">
+                      <h5 className="text-xs font-bold text-zinc-500 mb-2">실시간 최근 트랜잭션 내역 (최신 5건)</h5>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-[11px] text-zinc-600 dark:text-zinc-300">
+                          <thead>
+                            <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-400">
+                              <th className="py-2 font-medium">시간</th>
+                              <th className="py-2 font-medium">매장</th>
+                              <th className="py-2 font-medium">소속 / 고객명</th>
+                              <th className="py-2 font-medium">주문 메뉴</th>
+                              <th className="py-2 font-medium text-right">결제 금액</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sales.slice(0, 5).map((sale) => (
+                              <tr key={sale.id} className="border-b border-zinc-100/50 dark:border-zinc-800/30">
+                                <td className="py-2 font-mono text-zinc-400">
+                                  {new Date(sale.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </td>
+                                <td className="py-2 font-medium">{sale.storeName}</td>
+                                <td className="py-2">
+                                  {sale.paymentType === 'B2B Coupon' ? (
+                                    <span className="text-blue-500 font-semibold">{sale.companyName} ({sale.workerName})</span>
+                                  ) : (
+                                    <span className="text-zinc-500">{sale.workerName}</span>
+                                  )}
+                                </td>
+                                <td className="py-2">{sale.menuName}</td>
+                                <td className="py-2 text-right font-mono font-bold text-zinc-900 dark:text-zinc-100">{sale.amount.toLocaleString()}원</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. B2B BALANCE DETAIL PANEL */}
+                {activeKpiDetail === 'b2b' && (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                      <div>
+                        <h4 className="text-base font-bold flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                          <DollarSign className="w-5 h-5" />
+                          B2B 협력업체 선불 예치금 및 식권 관리
+                        </h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                          협력사별 예치금 잔액 모니터링, 경고 상태 확인 및 가상 계좌 실시간 충전을 지원합니다.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveKpiDetail(null)}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {companies.some(c => c.balance < 1000000) && (
+                      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-red-800 dark:text-red-300">
+                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        <div>
+                          <strong>예치금 경고:</strong> 잔액이 1,000,000원 미만인 협력업체가 존재합니다. 즉시 해당 협력사에 선납 요청 알림이 필요합니다.
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
+                            <th className="py-3 font-semibold">협력업체명</th>
+                            <th className="py-3 font-semibold">사업자등록번호</th>
+                            <th className="py-3 font-semibold text-center">누적 이용 포인트</th>
+                            <th className="py-3 font-semibold text-right">가용 예치 잔액</th>
+                            <th className="py-3 font-semibold text-center">운영 상태</th>
+                            <th className="py-3 font-semibold text-center w-64">예치금 즉시 충전</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {companies.map(company => {
+                            const isLow = company.balance < 1000000;
+                            return (
+                              <tr key={company.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
+                                <td className="py-3 font-bold text-zinc-900 dark:text-zinc-100">{company.name}</td>
+                                <td className="py-3 font-mono text-zinc-500">{company.businessNumber}</td>
+                                <td className="py-3 text-center font-mono font-bold text-zinc-700 dark:text-zinc-300">{(company.accumulatedMeals * 9000).toLocaleString()} P</td>
+                                <td className={`py-3 text-right font-mono font-bold ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                                  {company.balance.toLocaleString()}원
+                                </td>
+                                <td className="py-3 text-center">
+                                  {isLow ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30">
+                                      🔴 잔액 부족 경고
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30">
+                                      🟢 정상 운영
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 text-center">
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    <input 
+                                      type="number"
+                                      placeholder="충전액(원)"
+                                      value={rechargeAmounts[company.id] || ''}
+                                      onChange={(e) => setRechargeAmounts(prev => ({ ...prev, [company.id]: e.target.value }))}
+                                      className="w-28 px-2 py-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-mono font-bold focus:outline-none"
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        const amt = Number(rechargeAmounts[company.id]);
+                                        if (!amt || isNaN(amt) || amt <= 0) return;
+                                        chargeCompanyBalance(company.id, amt);
+                                        setRechargeAmounts(prev => ({ ...prev, [company.id]: '' }));
+                                      }}
+                                      className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                                    >
+                                      충전
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. LABOR EFFICIENCY DETAIL PANEL */}
+                {activeKpiDetail === 'labor' && (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                      <div>
+                        <h4 className="text-base font-bold flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                          <Users className="w-5 h-5" />
+                          6개 동 통합 인건비 효율 및 교차 근무 현황
+                        </h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                          타운 내 다중 요식업 매장 간의 실시간 인력 교차 매칭 지원 현황을 모니터링하고 조율합니다.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveKpiDetail(null)}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">이번 달 누적 인건비 절감액</span>
+                        <div className="text-2xl font-black font-mono mt-1 text-emerald-600 dark:text-emerald-400">
+                          2,450,000원 (+8.5%)
+                        </div>
+                      </div>
+                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">활성 교차 근무 인원</span>
+                        <div className="text-2xl font-black font-mono mt-1 text-amber-500">
+                          3개 조 (총 4명 현장 투입 중)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
+                            <th className="py-3 font-semibold">교차 근무 조율 대상 매장</th>
+                            <th className="py-3 font-semibold text-center">지원 인력</th>
+                            <th className="py-3 font-semibold">지원 피크 시간대</th>
+                            <th className="py-3 font-semibold text-center">효율 시너지</th>
+                            <th className="py-3 font-semibold text-center">현재 매칭 상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { shops: '양평신내서울해장국 ↔ 분식집', count: '2명', time: '점심 피크 (11:00 ~ 13:30)', grade: 'S등급 (최우수)', status: '🟢 매칭 가동 중' },
+                            { shops: '유림푸드 중화식당 ↔ 삼계탕&염소탕', count: '1명', time: '저녁 준비 (16:30 ~ 18:30)', grade: 'A등급 (우수)', status: '🟢 매칭 가동 중' },
+                            { shops: '장어&고기 ↔ CU 편의점', count: '1명', time: '야간 교대 (20:00 ~ 22:00)', grade: 'B등급 (보통)', status: '🟢 매칭 가동 중' }
+                          ].map((item, idx) => (
+                            <tr key={idx} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
+                              <td className="py-3 font-bold text-zinc-900 dark:text-zinc-100">{item.shops}</td>
+                              <td className="py-3 text-center font-semibold text-amber-600 dark:text-amber-400">{item.count}</td>
+                              <td className="py-3 text-zinc-600 dark:text-zinc-400 font-medium">{item.time}</td>
+                              <td className="py-3 text-center font-bold text-emerald-600 dark:text-emerald-400">{item.grade}</td>
+                              <td className="py-3 text-center text-zinc-500 dark:text-zinc-400 font-semibold">{item.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 mt-2 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">GCP AI 실시간 유동인구 기반 교차 근무 인력 재배치 조율</h5>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                          피크 시간 및 예약 데이터에 맞춰 실시간으로 동 간의 인력 배치 스케줄러를 재가동하여 초과 인건비를 방지합니다.
+                        </p>
+                      </div>
+                      <div>
+                        <button 
+                          disabled={isLaborCoordinating}
+                          onClick={() => {
+                            setIsLaborCoordinating(true);
+                            setLaborMsg('');
+                            setTimeout(() => {
+                              setIsLaborCoordinating(false);
+                              setLaborMsg('교차 조율 성공! 양평신내서울해장국 점심 피크 혼잡도 증가 예상에 따라 분식집 인력 1명을 실시간 추가 지원 교차 배치하였습니다. (추가 비용 절감 예상치: +120,000원)');
+                            }, 1500);
+                          }}
+                          className={`px-4 py-2 rounded-xl text-xs font-extrabold text-white transition-all flex items-center gap-1.5 shadow-md ${
+                            isLaborCoordinating 
+                              ? 'bg-zinc-500 cursor-not-allowed' 
+                              : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                          }`}
+                        >
+                          {isLaborCoordinating ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              스케줄 재조율 중...
+                            </>
+                          ) : (
+                            <>
+                              <Activity className="w-3.5 h-3.5" />
+                              🤖 AI 인력 교차 근무 자동 조율 실행
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {laborMsg && (
+                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 p-3.5 rounded-xl flex items-start justify-between gap-2 text-xs text-emerald-800 dark:text-emerald-300 animate-slideDown">
+                        <div className="flex gap-2">
+                          <Check className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                          <div>{laborMsg}</div>
+                        </div>
+                        <button onClick={() => setLaborMsg('')} className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. LEASE AND VACANCY DETAIL PANEL */}
+                {activeKpiDetail === 'lease' && (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                      <div>
+                        <h4 className="text-base font-bold flex items-center gap-2 text-purple-600 dark:text-purple-400">
+                          <Building2 className="w-5 h-5" />
+                          유림타운 상층부 오피스 임대 및 공실 현황
+                        </h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                          각 동 1층 매장과 연동된 2~3층 오피스의 월세 완납/미납 모니터링 및 즉시 납부 독촉장 전송이 가능합니다.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveKpiDetail(null)}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
+                            <th className="py-3 font-semibold">건물명 (동)</th>
+                            <th className="py-3 font-semibold">1층 가맹상점</th>
+                            <th className="py-3 font-semibold">상층부 입주사</th>
+                            <th className="py-3 font-semibold">계약 만료일</th>
+                            <th className="py-3 font-semibold text-right">월 임대료</th>
+                            <th className="py-3 font-semibold text-center">임대료 납부</th>
+                            <th className="py-3 font-semibold text-center">공실 여부 / 모집</th>
+                            <th className="py-3 font-semibold text-center w-36">관리 액션</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {buildings.map(building => {
+                            return (
+                              <tr key={building.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
+                                <td className="py-3 font-bold text-zinc-900 dark:text-zinc-100">{building.name}</td>
+                                <td className="py-3 font-medium text-zinc-600 dark:text-zinc-400">{building.storeName}</td>
+                                <td className="py-3 text-zinc-700 dark:text-zinc-300 font-semibold">{building.officeName}</td>
+                                <td className="py-3 font-mono text-zinc-500">{building.expiryDate}</td>
+                                <td className="py-3 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
+                                  {building.monthlyRent.toLocaleString()}원
+                                </td>
+                                <td className="py-3 text-center">
+                                  {building.rentPaid ? (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">🟢 완납</span>
+                                  ) : (
+                                    <span className="text-rose-600 dark:text-rose-400 font-bold animate-pulse">🔴 미납</span>
+                                  )}
+                                </td>
+                                <td className="py-3 text-center">
+                                  {building.officeVacant ? (
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className="text-zinc-500 font-bold text-[10px] bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-200/50 dark:border-zinc-700/30">
+                                        ⚪ 공실
+                                      </span>
+                                      <span className="text-[9px] mt-0.5 font-bold">
+                                        {recruitingStatus[building.id] === 'active' || recruitingStatus[building.id] === undefined ? (
+                                          <span className="text-blue-600 dark:text-blue-400">📢 입주사 모집 중</span>
+                                        ) : (
+                                          <span className="text-zinc-400">🔇 모집 보류</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-zinc-700 dark:text-zinc-300 text-[10px]">입주 완료</span>
+                                  )}
+                                </td>
+                                <td className="py-2 text-center">
+                                  {building.officeVacant ? (
+                                    <button 
+                                      onClick={() => {
+                                        setRecruitingStatus(prev => ({
+                                          ...prev,
+                                          [building.id]: (prev[building.id] === 'active' || prev[building.id] === undefined) ? 'paused' : 'active'
+                                        }));
+                                      }}
+                                      className="px-2 py-1 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                                    >
+                                      모집상태 변경
+                                    </button>
+                                  ) : (
+                                    !building.rentPaid && (
+                                      <button 
+                                        onClick={() => sendDunningNotice(building.id)}
+                                        className="px-2.5 py-1 text-[10px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-sm"
+                                      >
+                                        독촉장 송부
+                                      </button>
+                                    )
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -962,9 +2088,9 @@ export default function App() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs text-zinc-500">
-                          <span>누적 소모 식수:</span>
+                          <span>누적 사용 포인트:</span>
                           <span className="font-bold text-zinc-700 dark:text-zinc-300 font-mono">
-                            {comp.accumulatedMeals}식
+                            {(comp.accumulatedMeals * 9000).toLocaleString()} P
                           </span>
                         </div>
                       </div>
@@ -1144,8 +2270,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* Phase 5: B2B Settlement & Billing and Cold Chain IoT Monitor */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Phase 5: B2B Settlement & Billing */}
+            <div className="grid grid-cols-1 gap-6">
               {/* B2B Settlement & Billing Panel */}
               <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
                 <div>
@@ -1154,7 +2280,7 @@ export default function App() {
                     B2B 정산 대시보드 및 전자세금계산서 가상 발행
                   </h3>
                   <p className="text-xs text-zinc-500 mt-1">
-                    협력 건설사별 누적 식수 및 당월 청구 금액 현황입니다. 국세청 전자세금계산서를 가상으로 즉시 발행할 수 있습니다.
+                    협력 건설사별 누적 사용 포인트 및 당월 청구 금액 현황입니다. 국세청 전자세금계산서를 가상으로 즉시 발행할 수 있습니다.
                   </p>
                 </div>
                 
@@ -1164,7 +2290,7 @@ export default function App() {
                       <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 font-semibold">
                         <th className="py-2.5 px-3">협력사명</th>
                         <th className="py-2.5 px-3">사업자번호</th>
-                        <th className="py-2.5 px-3 text-right">당월 식수</th>
+                        <th className="py-2.5 px-3 text-right">당월 이용 포인트</th>
                         <th className="py-2.5 px-3 text-right">정산 금액</th>
                         <th className="py-2.5 px-3 text-center">세금계산서 상태</th>
                         <th className="py-2.5 px-3 text-center">작업</th>
@@ -1172,7 +2298,7 @@ export default function App() {
                     </thead>
                     <tbody>
                       {companies.map((comp, idx) => {
-                        const amount = comp.accumulatedMeals * 8000;
+                        const amount = comp.accumulatedMeals * 9000;
                         const invoice = issuedInvoices[comp.id];
                         const bizNum = comp.businessNumber || `120-81-${12345 + idx}`;
                         return (
@@ -1180,7 +2306,7 @@ export default function App() {
                             <td className="py-3 px-3 font-extrabold text-xs">{comp.name}</td>
                             <td className="py-3 px-3 font-mono text-[10px] text-zinc-500">{bizNum}</td>
                             <td className="py-3 px-3 text-right font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                              {comp.accumulatedMeals}식
+                              {(comp.accumulatedMeals * 9000).toLocaleString()} P
                             </td>
                             <td className="py-3 px-3 text-right font-mono font-extrabold text-blue-600 dark:text-blue-400">
                               {amount.toLocaleString()}원
@@ -1248,115 +2374,8 @@ export default function App() {
                   </table>
                 </div>
               </div>
-
-              {/* Cold Chain IoT Monitor Panel */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
-                <div>
-                  <h3 className="text-base font-bold flex items-center gap-2">
-                    <Thermometer className="w-5 h-5 text-rose-500" />
-                    콜드체인(Cold Chain) IoT 원격 온도 관리 시스템
-                  </h3>
-                  <p className="text-xs text-zinc-500 mt-1">
-                    식자재 저온 창고 및 냉동창고의 IoT 실시간 온도입니다. 기준 임계 온도(-15.0°C) 이상 상승 시 비상 알림이 작동합니다.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Current Temp Card */}
-                  <div className={`p-4 rounded-xl border flex flex-col justify-between h-36 transition-all duration-300 ${
-                    coldChainTemp > -15.0
-                      ? 'border-rose-500 bg-rose-500/[0.06] shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-pulse'
-                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950'
-                  }`}>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-zinc-500">메인 냉동보관소 현지 온도</span>
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
-                        coldChainTemp > -15.0 ? 'bg-rose-500 text-white' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                      }`}>
-                        {coldChainTemp > -15.0 ? '⚠️ 위험 수치 초과' : '🟢 정상 보관 (-15°C 이하)'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline gap-1 mt-2">
-                      <span className={`text-3xl font-black font-mono tracking-tight ${coldChainTemp > -15.0 ? 'text-rose-600' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                        {coldChainTemp.toFixed(1)}
-                      </span>
-                      <span className="text-base font-extrabold text-zinc-400">°C</span>
-                    </div>
-
-                    <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1 mt-2">
-                      <Activity className="w-3.5 h-3.5 text-blue-500" />
-                      실시간 센서 정상 작동 중 (갱신 주기: 5초)
-                    </div>
-                  </div>
-
-                  {/* Temp Manipulation Controls */}
-                  <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl flex flex-col justify-between h-36">
-                    <span className="text-xs font-bold text-zinc-500">센서 강제 온도 조작 & 고장 시뮬레이션</span>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <button
-                        onClick={() => setColdChainTemp(prev => prev - 0.5)}
-                        className="px-2 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-extrabold text-[10px] rounded-lg transition-all"
-                      >
-                        온도 0.5°C 낮추기
-                      </button>
-                      <button
-                        onClick={() => setColdChainTemp(prev => prev + 0.5)}
-                        className="px-2 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-extrabold text-[10px] rounded-lg transition-all"
-                      >
-                        온도 0.5°C 높이기
-                      </button>
-                      <button
-                        onClick={() => setColdChainTemp(-25.0)}
-                        className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[10px] rounded-lg transition-all shadow-sm"
-                      >
-                        급속 냉동 가동 (-25°C)
-                      </button>
-                      <button
-                        onClick={() => setColdChainTemp(-5.0)}
-                        className="px-2 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] rounded-lg transition-all shadow-sm"
-                      >
-                        온도 누출 고장 (-5°C)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Alarm & Emergency Dispatch Panel */}
-                {coldChainTemp > -15.0 && (
-                  <div className="border border-rose-500 bg-rose-500/[0.05] p-4 rounded-xl flex flex-col gap-3 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.1)]">
-                    <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-                      <AlertTriangle className="w-5 h-5 text-rose-500" />
-                      <span className="text-xs font-black">
-                        [콜드체인 위험 감지] 냉동보관고 온도가 -15.0°C보다 높습니다!
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
-                      냉각 가스 유출 또는 서브 도어 개방 고장이 의심됩니다. 현장 담당자 긴급 통보 및 즉시 점검이 요구됩니다.
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          alert(`[콜드체인 비상 SMS 소집 긴급 발송 완료]\n\n수신처: 현대건설 현장안전책임자, 유림푸드 마스터 점장, 보수기술팀\n발송내용: "유림푸드 타운 냉동저장고가 임계온도(-15도)를 초과해 현재 ${coldChainTemp.toFixed(1)}도에 도달했습니다. 신속히 현장 출동하시기 바랍니다."`);
-                        }}
-                        className="flex-1 text-center bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] py-2 rounded-xl transition-all shadow-md active:scale-[0.98]"
-                      >
-                        비상 경보 SMS 긴급 일괄 발송
-                      </button>
-                      <button
-                        onClick={() => {
-                          setColdChainTemp(-18.5);
-                          alert("콜드체인 상태가 수동 리셋되었습니다. 온도가 정상치(-18.5°C)로 조율되었습니다.");
-                        }}
-                        className="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-extrabold text-[10px] rounded-xl transition-all"
-                      >
-                        센서 수동 복구
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
+
 
           </div>
         )}
@@ -1463,16 +2482,16 @@ export default function App() {
                         alert('이름과 전화번호를 모두 입력해 주세요.');
                         return;
                       }
-                      // Grant daily 3 meals (as specified)
-                      addWorkerToken(activeCompany.id, newWorkerName, newWorkerPhone, 3);
+                      // Grant daily 25,000 points
+                      addWorkerToken(activeCompany.id, newWorkerName, newWorkerPhone, 25000);
                       setNewWorkerName('');
                       setNewWorkerPhone('');
-                      alert(`${newWorkerName} 님에게 일일 3식 식사 권한이 정상 부여되었습니다.`);
+                      alert(`${newWorkerName} 님에게 일일 25,000 P 식권 포인트가 정상 지급되었습니다.`);
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-6 py-2.5 text-xs transition-colors flex items-center gap-1.5 shadow"
                   >
                     <Plus className="w-4 h-4" />
-                    일일 3식 권한 부여 및 QR 발행
+                    일일 25,000 P 권한 부여 및 QR 발행
                   </button>
                 </div>
               </div>
@@ -1499,7 +2518,7 @@ export default function App() {
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold">
-                          오늘 {worker.remainingMeals}식
+                          잔여 {worker.remainingPoints ? worker.remainingPoints.toLocaleString() : 0} P
                         </span>
                         <button 
                           onClick={() => setQrModalWorker(worker)}
@@ -1643,7 +2662,7 @@ export default function App() {
                       <option value="">-- 결제할 근로자를 선택해 주세요 --</option>
                       {workers.map(w => (
                         <option key={w.id} value={w.qrCode}>
-                          {w.name} ({w.companyName}) - 잔여 {w.remainingMeals}식 [토큰: {w.qrCode}]
+                          {w.name} ({w.companyName}) - 잔여 {w.remainingPoints ? w.remainingPoints.toLocaleString() : 0} P [토큰: {w.qrCode}]
                         </option>
                       ))}
                     </select>
@@ -2085,9 +3104,9 @@ export default function App() {
 
                     {/* Meal Limit Counter Card */}
                     <div className="p-3 bg-zinc-900/60 border border-zinc-900 rounded-xl flex items-center justify-between">
-                      <span className="text-xs font-bold text-zinc-400">오늘 남은 식사 권한:</span>
+                      <span className="text-xs font-bold text-zinc-400">오늘 식사 잔여 포인트:</span>
                       <span className="text-sm font-black text-emerald-400 bg-emerald-950/40 border border-emerald-900/50 px-3 py-1 rounded-lg">
-                        {loggedInWorker.remainingMeals}식 가능
+                        {loggedInWorker.remainingPoints ? loggedInWorker.remainingPoints.toLocaleString() : 0} P
                       </span>
                     </div>
 
@@ -2410,8 +3429,8 @@ export default function App() {
 
             <div className="mt-6 w-full p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl text-left text-xs text-zinc-500 font-mono">
               <div className="flex justify-between mb-1">
-                <span>일일 남은 식수:</span>
-                <span className="font-bold text-zinc-900 dark:text-zinc-100">{qrModalWorker.remainingMeals}식</span>
+                <span>잔여 포인트:</span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">{qrModalWorker.remainingPoints ? qrModalWorker.remainingPoints.toLocaleString() : 0} P</span>
               </div>
               <div className="flex justify-between">
                 <span>전화번호:</span>
@@ -2543,35 +3562,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* IoT Stats section */}
-            <div className="mb-6">
-              <h5 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 font-sans">
-                <Activity className="w-3.5 h-3.5 text-purple-500" />
-                IoT 실시간 에너지 사용 현황
-              </h5>
-              
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/50 dark:border-zinc-800/50 rounded-2xl flex flex-col gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between text-xs font-mono">
-                    <span className="text-zinc-500">전력 사용량:</span>
-                    <span className="font-bold text-zinc-900 dark:text-zinc-100">{selectedBuilding.electricity} kWh / 800 kWh 한도</span>
-                  </div>
-                  <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="h-full bg-purple-500" style={{ width: `${(selectedBuilding.electricity / 800 * 100).toFixed(0)}%` }}></div>
-                  </div>
-                </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between text-xs font-mono">
-                    <span className="text-zinc-500">수도 사용량:</span>
-                    <span className="font-bold text-zinc-900 dark:text-zinc-100">{selectedBuilding.water} 톤 / 150 톤 한도</span>
-                  </div>
-                  <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: `${(selectedBuilding.water / 150 * 100).toFixed(0)}%` }}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* Status & Action Footer */}
             <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 pt-4 mt-6 gap-3">
