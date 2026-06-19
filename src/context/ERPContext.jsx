@@ -1,23 +1,31 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useRef, useCallback } from 'react';
 
 export const ERPContext = createContext();
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5000/api'
+  : 'https://yulim-food-api-150418869273.asia-northeast3.run.app/api';
+
+const defaultAllowedTimes = {
+  breakfast: { active: true, start: '06:00', end: '09:00' },
+  lunch: { active: true, start: '11:00', end: '14:00' },
+  dinner: { active: true, start: '17:00', end: '20:00' }
+};
 
 const initialCompanies = [
-  { id: 'c1', name: '성우건설 (주)', businessNumber: '124-81-99882', balance: 5000000, accumulatedMeals: 420 },
-  { id: 'c2', name: '대우이엔씨 (주)', businessNumber: '214-86-77112', balance: 12500000, accumulatedMeals: 1120 },
-  { id: 'c3', name: '한신공영 (주)', businessNumber: '110-82-44331', balance: 3200000, accumulatedMeals: 280 },
-  { id: 'c4', name: '현대건설 (주)', businessNumber: '101-81-55443', balance: 900000, accumulatedMeals: 150 },
+  { id: 'c1', name: '성우건설 (주)', businessNumber: '124-81-99882', balance: 5000000, accumulatedMeals: 420, allowedDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], allowedTimes: defaultAllowedTimes },
+  { id: 'c2', name: '대우이엔씨 (주)', businessNumber: '214-86-77112', balance: 12500000, accumulatedMeals: 1120, allowedDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], allowedTimes: defaultAllowedTimes },
+  { id: 'c3', name: '한신공영 (주)', businessNumber: '110-82-44331', balance: 3200000, accumulatedMeals: 280, allowedDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], allowedTimes: defaultAllowedTimes },
+  { id: 'c4', name: '현대건설 (주)', businessNumber: '101-81-55443', balance: 900000, accumulatedMeals: 150, allowedDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], allowedTimes: defaultAllowedTimes },
 ];
 
 const initialWorkers = [
-  { id: 'w1', companyId: 'c1', companyName: '성우건설 (주)', name: '김철수', phone: '010-1234-5678', remainingPoints: 25000, qrCode: 'USER_TOKEN_KCS_1001' },
-  { id: 'w2', companyId: 'c1', companyName: '성우건설 (주)', name: '이영희', phone: '010-8765-4321', remainingPoints: 12000, qrCode: 'USER_TOKEN_LYH_1002' },
-  { id: 'w3', companyId: 'c2', companyName: '대우이엔씨 (주)', name: '박민수', phone: '010-1111-2222', remainingPoints: 45000, qrCode: 'USER_TOKEN_PMS_1003' },
-  { id: 'w4', companyId: 'c2', companyName: '대우이엔씨 (주)', name: '최지우', phone: '010-3333-4444', remainingPoints: 0, qrCode: 'USER_TOKEN_CJW_1004' },
-  { id: 'w5', companyId: 'c3', companyName: '한신공영 (주)', name: '정태호', phone: '010-5555-6666', remainingPoints: 18000, qrCode: 'USER_TOKEN_JTH_1005' },
-  { id: 'w6', companyId: 'c4', companyName: '현대건설 (주)', name: '홍길동', phone: '010-9999-8888', remainingPoints: 30000, qrCode: 'USER_TOKEN_HGD_7777' },
+  { id: 'w1', companyId: 'c1', companyName: '성우건설 (주)', name: '김철수', phone: '010-1234-5678', remainingPoints: 15000, qrCode: 'USER_TOKEN_KCS_1001', grade: '일반' },
+  { id: 'w2', companyId: 'c1', companyName: '성우건설 (주)', name: '이영희', phone: '010-8765-4321', remainingPoints: 15000, qrCode: 'USER_TOKEN_LYH_1002', grade: '일반' },
+  { id: 'w3', companyId: 'c2', companyName: '대우이엔씨 (주)', name: '박민수', phone: '010-1111-2222', remainingPoints: 50000, qrCode: 'USER_TOKEN_PMS_1003', grade: '관리자' },
+  { id: 'w4', companyId: 'c2', companyName: '대우이엔씨 (주)', name: '최지우', phone: '010-3333-4444', remainingPoints: 0, qrCode: 'USER_TOKEN_CJW_1004', grade: '일반' },
+  { id: 'w5', companyId: 'c3', companyName: '한신공영 (주)', name: '정태호', phone: '010-5555-6666', remainingPoints: 15000, qrCode: 'USER_TOKEN_JTH_1005', grade: '일반' },
+  { id: 'w6', companyId: 'c4', companyName: '현대건설 (주)', name: '홍길동', phone: '010-9999-8888', remainingPoints: 25000, qrCode: 'USER_TOKEN_HGD_7777', grade: '반장' },
 ];
 
 const initialOrders = [
@@ -125,11 +133,17 @@ export const ERPProvider = ({ children }) => {
   });
 
   const [backendAvailable, setBackendAvailable] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('syncing');
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
-  // ----------------------------------------------------
-  // LOAD DATA FROM BACKEND API (WITH MOCK FALLBACK)
-  // ----------------------------------------------------
-  const syncFromBackend = async () => {
+  const pollingIntervalRef = useRef(null);
+  const isSyncingRef = useRef(false);
+
+  const syncFromBackend = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+    setConnectionStatus('syncing');
+
     try {
       const [compRes, workRes, ordRes, saleRes, iotRes, bldRes, kitRes, savRes] = await Promise.all([
         fetch(`${API_BASE_URL}/companies`).then(r => r.json()),
@@ -154,17 +168,67 @@ export const ERPProvider = ({ children }) => {
         setColdChainTemp(Number(iotRes.coldChainTemp));
       }
       setBackendAvailable(true);
+      setConnectionStatus('connected');
+      setLastSyncTime(new Date());
     } catch (err) {
       console.warn("Backend API not reachable. Operating in local storage mode:", err.message);
       setBackendAvailable(false);
+      setConnectionStatus('disconnected');
+    } finally {
+      isSyncingRef.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     syncFromBackend();
-  }, []);
+    const POLLING_INTERVAL_MS = 10000;
 
-  // Sync state to local storage for local/fallback persistence
+    const startPolling = () => {
+      if (pollingIntervalRef.current) return;
+      pollingIntervalRef.current = setInterval(() => {
+        syncFromBackend();
+      }, POLLING_INTERVAL_MS);
+    };
+
+    const stopPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncFromBackend();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    const handleOnline = () => {
+      syncFromBackend();
+      startPolling();
+    };
+    const handleOffline = () => {
+      setConnectionStatus('disconnected');
+      stopPolling();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    startPolling();
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncFromBackend]);
+
   useEffect(() => {
     if (!backendAvailable) {
       localStorage.setItem('erp_companies', JSON.stringify(companies));
@@ -214,7 +278,6 @@ export const ERPProvider = ({ children }) => {
     }
   }, [coldChainTemp, totalSavings, backendAvailable]);
 
-  // SCM / ERP Actions
   const addSCMOrder = async (storeName, itemName, quantity, unit, price) => {
     if (backendAvailable) {
       try {
@@ -348,7 +411,6 @@ export const ERPProvider = ({ children }) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
   };
 
-  // B2B Actions
   const chargeCompanyBalance = async (companyId, amount) => {
     if (backendAvailable) {
       try {
@@ -366,13 +428,73 @@ export const ERPProvider = ({ children }) => {
     setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, balance: c.balance + Number(amount) } : c));
   };
 
-  const addWorkerToken = async (companyId, name, phone, dailyPoints = 25000) => {
+  // B2B 요일/시간 설정 변경 액션 추가
+  const updateCompanyPolicy = async (companyId, allowedDays, allowedTimes) => {
+    if (backendAvailable) {
+      try {
+        await fetch(`${API_BASE_URL}/companies/${companyId}/policy`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allowedDays, allowedTimes })
+        });
+        await syncFromBackend();
+        return;
+      } catch (err) {
+        console.error("API error, falling back:", err);
+      }
+    }
+    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, allowedDays, allowedTimes } : c));
+  };
+
+  const addCompany = async (name, businessNumber, initialBalance = 1000000) => {
+    if (backendAvailable) {
+      try {
+        await fetch(`${API_BASE_URL}/companies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, businessNumber, balance: Number(initialBalance) })
+        });
+        await syncFromBackend();
+        return;
+      } catch (err) {
+        console.error("API error, falling back:", err);
+      }
+    }
+    const newCompany = {
+      id: `c${Date.now()}`,
+      name,
+      businessNumber,
+      balance: Number(initialBalance),
+      accumulatedMeals: 0,
+      allowedDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      allowedTimes: defaultAllowedTimes
+    };
+    setCompanies(prev => [...prev, newCompany]);
+  };
+
+  const deleteCompany = async (companyId) => {
+    if (backendAvailable) {
+      try {
+        await fetch(`${API_BASE_URL}/companies/${companyId}`, {
+          method: 'DELETE'
+        });
+        await syncFromBackend();
+        return;
+      } catch (err) {
+        console.error("API error, falling back:", err);
+      }
+    }
+    setCompanies(prev => prev.filter(c => c.id !== companyId));
+    setWorkers(prev => prev.filter(w => w.companyId !== companyId));
+  };
+
+  const addWorkerToken = async (companyId, name, phone, dailyPoints = 25000, grade = '반장') => {
     if (backendAvailable) {
       try {
         await fetch(`${API_BASE_URL}/workers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyId, name, phone, dailyPoints })
+          body: JSON.stringify({ companyId, name, phone, dailyPoints, grade })
         });
         await syncFromBackend();
         return;
@@ -391,7 +513,8 @@ export const ERPProvider = ({ children }) => {
       name,
       phone,
       remainingPoints: Number(dailyPoints),
-      qrCode: `USER_TOKEN_${name.substring(0, 3)}_${Math.floor(1000 + Math.random() * 9000)}`
+      qrCode: `USER_TOKEN_${name.substring(0, 3)}_${Math.floor(1000 + Math.random() * 9000)}`,
+      grade
     };
     setWorkers(prev => [...prev, newWorker]);
   };
@@ -409,7 +532,6 @@ export const ERPProvider = ({ children }) => {
     setWorkers(prev => prev.filter(w => w.id !== workerId));
   };
 
-  // QR POS Check-out simulator action (Secure API Checkout with used tokens check)
   const scanQRAndPay = async (qrCode, storeName, mealPrice = 9000, customMenuName = '양평해장국 특') => {
     if (backendAvailable) {
       try {
@@ -420,15 +542,27 @@ export const ERPProvider = ({ children }) => {
         });
         const data = await res.json();
         await syncFromBackend();
-        return data; // returns { success, message, ... }
+        return data;
       } catch (err) {
         console.error("API error, falling back:", err);
         return { success: false, message: '네트워크 연결 오류로 결제를 완료할 수 없습니다.' };
       }
     }
 
-    // In-memory fallback
-    const workerIndex = workers.findIndex(w => w.qrCode === qrCode.split('_')[0]);
+    const parts = qrCode.split('_');
+    const timestampStr = parts[parts.length - 1];
+    const timestamp = Number(timestampStr);
+    if (!isNaN(timestamp)) {
+      const diff = Date.now() - timestamp;
+      if (diff > 30000) {
+        return { success: false, message: '보안 경고: 만료된 QR 식권입니다. 새로고침 후 다시 이용해 주세요.' };
+      }
+    } else {
+      return { success: false, message: '보안 경고: 올바르지 않은 QR 코드 규격입니다.' };
+    }
+
+    const baseQrCode = parts.slice(0, 4).join('_');
+    const workerIndex = workers.findIndex(w => w.qrCode === baseQrCode);
     if (workerIndex === -1) {
       return { success: false, message: '유효하지 않은 QR 코드 토큰입니다.' };
     }
@@ -450,7 +584,29 @@ export const ERPProvider = ({ children }) => {
     if (company.balance < mealPrice) {
       return { 
         success: false, 
-        message: `소속 건설사(${company.name})의 예치 자금이 부족하여 결제할 수 없습니다. (현재 잔액: ${company.balance.toLocaleString()}원)` 
+        message: `소속사(${company.name})의 예치 자금이 부족하여 결제할 수 없습니다. (현재 잔액: ${company.balance.toLocaleString()}원)` 
+      };
+    }
+
+
+
+    const nowTime = new Date().toTimeString().substring(0, 5); // "HH:MM"
+    const allowedTimes = company.allowedTimes || defaultAllowedTimes;
+    let isWithinTime = false;
+    let currentMealName = '';
+
+    for (const [meal, policy] of Object.entries(allowedTimes)) {
+      if (policy.active && nowTime >= policy.start && nowTime <= policy.end) {
+        isWithinTime = true;
+        currentMealName = meal === 'breakfast' ? '조식' : meal === 'lunch' ? '중식' : '석식';
+        break;
+      }
+    }
+
+    if (!isWithinTime) {
+      return {
+        success: false,
+        message: `결제 실패: 현재 시각(${nowTime})은 B2B 지정 식사 허용 시간대가 아닙니다.`
       };
     }
 
@@ -528,7 +684,6 @@ export const ERPProvider = ({ children }) => {
     setSales(prev => [newSale, ...prev]);
   };
 
-  // IoT Controls
   const toggleAcPeakControl = async () => {
     if (backendAvailable) {
       try {
@@ -617,7 +772,6 @@ export const ERPProvider = ({ children }) => {
     setKitchenOrders(prev => prev.filter(o => o.id !== orderId));
   };
 
-  // Reset function
   const resetToInitial = async () => {
     if (backendAvailable) {
       try {
@@ -651,11 +805,16 @@ export const ERPProvider = ({ children }) => {
       coldChainTemp,
       setColdChainTemp: updateColdChainTempApi,
       totalSavings,
+      connectionStatus,
+      lastSyncTime,
       addSCMOrder,
       addBulkSCMOrders,
       consolidateAndNegotiateOrders,
       updateSCMOrderStatus,
       chargeCompanyBalance,
+      updateCompanyPolicy, // 새로 추가
+      addCompany, // 새로 추가
+      deleteCompany, // 새로 추가
       addWorkerToken,
       deleteWorkerToken,
       scanQRAndPay,

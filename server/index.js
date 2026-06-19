@@ -508,9 +508,28 @@ app.post('/api/sales/checkout', async (req, res) => {
     });
   }
 
-  // 2. 단방향 TOTP 구조 해석: 토큰의 Suffix(_랜덤수) 제외한 원래의 Worker QR 토큰 추출
   const parts = qrCode.split('_');
-  const baseQrCode = parts.slice(0, 3).join('_'); // e.g. "USER_TOKEN_KCS_1001"
+
+  // 1.5. 보안검증: 타임스탬프 유효시간 검사 (30초 만료)
+  const timestampStr = parts[parts.length - 1];
+  const timestamp = Number(timestampStr);
+  if (!isNaN(timestamp)) {
+    const diff = Date.now() - timestamp;
+    if (diff > 30000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '보안 경고: 만료된 QR 식권입니다. 새로고침 후 다시 이용해 주세요.' 
+      });
+    }
+  } else {
+    return res.status(400).json({ 
+      success: false, 
+      message: '보안 경고: 올바르지 않은 QR 코드 규격입니다.' 
+    });
+  }
+
+  // 2. 원래의 Worker QR 토큰 추출 (e.g. "USER_TOKEN_KCS_1001")
+  const baseQrCode = parts.slice(0, 4).join('_');
 
   if (useDatabase) {
     const client = await pool.connect();

@@ -25,10 +25,49 @@ import {
   AlertTriangle,
   Volume2,
   FileText,
-  Thermometer
+  Thermometer,
+  Download
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { ERPContext, standardCatalog } from './context/ERPContext';
+import { useAuth, ROLE_LABELS } from './context/AuthContext';
+import LoginPage from './components/LoginPage';
+import SuperAdminPage from './pages/SuperAdminPage';
+import B2BPortalPage from './pages/B2BPortalPage';
+import StorePOSPage from './pages/StorePOSPage';
+import WorkerMobilePage from './pages/WorkerMobilePage';
+import KitchenKDSPage from './pages/KitchenKDSPage';
+import UserGuidePage from './pages/UserGuidePage';
+
+// ============================================================
+// SyncTimeAgo — "N초 전" 실시간 표시 컴포넌트
+// ============================================================
+// 마지막으로 서버에서 데이터를 가져온 시각을 "3초 전", "1분 전" 형태로
+// 1초마다 자동 갱신하여 보여줍니다.
+// (카카오톡의 "읽지 않은 메시지: 5초 전" 같은 느낌!)
+function SyncTimeAgo({ lastSyncTime }) {
+  const [timeAgo, setTimeAgo] = useState('');
+
+  useEffect(() => {
+    // 1초마다 "몇 초 전인지" 다시 계산
+    const updateTimeAgo = () => {
+      if (!lastSyncTime) return;
+      const diffSec = Math.floor((Date.now() - lastSyncTime.getTime()) / 1000);
+      if (diffSec < 5) setTimeAgo('방금');
+      else if (diffSec < 60) setTimeAgo(`${diffSec}초 전`);
+      else if (diffSec < 3600) setTimeAgo(`${Math.floor(diffSec / 60)}분 전`);
+      else setTimeAgo(`${Math.floor(diffSec / 3600)}시간 전`);
+    };
+
+    updateTimeAgo();
+    const timer = setInterval(updateTimeAgo, 1000);
+    return () => clearInterval(timer); // 정리 (메모리 누수 방지)
+  }, [lastSyncTime]);
+
+  return (
+    <span style={{ opacity: 0.7, fontSize: 9 }}>· {timeAgo}</span>
+  );
+}
 
 export default function App() {
   const {
@@ -37,9 +76,14 @@ export default function App() {
     orders,
     sales,
     iot,
+    coldChainTemp,
     buildings,
     kitchenOrders,
     totalSavings,
+    // ── 실시간 동기화 상태 (새로 추가) ──
+    connectionStatus,
+    lastSyncTime,
+    // ── 비즈니스 액션 함수들 ──
     addSCMOrder,
     addBulkSCMOrders,
     consolidateAndNegotiateOrders,
@@ -57,8 +101,33 @@ export default function App() {
     resetToInitial
   } = useContext(ERPContext);
 
+  // ── Firebase Auth 상태 ──────────────────────────────────────
+  const { currentUser, userRole, userName, logout, loading: authLoading } = useAuth();
+
+  // Firebase role → App role 매핑
+  // userRole이 바뀌면 자동으로 해당 화면으로 전환
+  const roleMap = {
+    super_admin:   'Super_Admin',
+    b2b_client:    'Client_B2B',
+    store_pos:     'Store_Manager',
+    kitchen_kds:   'Kitchen_KDS',
+    worker_mobile: 'Worker_Mobile',
+  };
+
   const [role, setRole] = useState('Login'); // Login, Super_Admin, Client_B2B, Store_Manager, Worker_Mobile, Kitchen_KDS
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Firebase 로그인 성공 시 자동으로 역할 화면 전환
+  useEffect(() => {
+    if (currentUser && userRole) {
+      const mappedRole = roleMap[userRole] || 'Super_Admin';
+      setRole(mappedRole);
+      setIsLoggedIn(true);
+    } else if (!currentUser) {
+      setRole('Login');
+      setIsLoggedIn(false);
+    }
+  }, [currentUser, userRole]);
   const [selectedLoginRole, setSelectedLoginRole] = useState('Super_Admin');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginCompanyId, setLoginCompanyId] = useState('c4');
@@ -66,113 +135,21 @@ export default function App() {
   const [loginWorkerPhone, setLoginWorkerPhone] = useState('');
   const [loginKdsStoreName, setLoginKdsStoreName] = useState('양평신내서울해장국');
   const [theme, setTheme] = useState('dark'); // dark, light
-  const [superScmTab, setSuperScmTab] = useState('consolidated'); // consolidated, individual
-  const [negoResultModal, setNegoResultModal] = useState(null); // null or { savings, message }
-  const [selectedBuilding, setSelectedBuilding] = useState(null); // null or building object
 
   // ----------------------------------------------------
-  // MOBILE WORKER APP STATE & TIMER
+  // SHARED STATES FOR MODULES
   // ----------------------------------------------------
   const [loginPhone, setLoginPhone] = useState('');
   const [loggedInWorker, setLoggedInWorker] = useState(null);
-  const [qrCodeTimer, setQrCodeTimer] = useState(30);
-  const [workerQRValue, setWorkerQRValue] = useState('');
-
-  // ----------------------------------------------------
-  // KITCHEN KDS STATE
-  // ----------------------------------------------------
   const [selectedKdsStore, setSelectedKdsStore] = useState('양평신내서울해장국');
-  const [issuedInvoices, setIssuedInvoices] = useState({});
-
-  // ----------------------------------------------------
-  // CLIENT_B2B STATE
-  // ----------------------------------------------------
   const [selectedCompanyId, setSelectedCompanyId] = useState('c4'); // Default to Hyundai Construction (c4) for demo
-  const [newWorkerName, setNewWorkerName] = useState('');
-  const [newWorkerPhone, setNewWorkerPhone] = useState('');
-  const [virtualAccountModalOpen, setVirtualAccountModalOpen] = useState(false);
-  const [chargeInput, setChargeInput] = useState('');
-  const [qrModalWorker, setQrModalWorker] = useState(null);
-
-  // ----------------------------------------------------
-  // STORE_MANAGER POS STATE (Phase 2 Split POS & Scanner)
-  // ----------------------------------------------------
   const [selectedStore, setSelectedStore] = useState('양평신내서울해장국');
   const [selectedMenu, setSelectedMenu] = useState('양평해장국 특');
   const [qrInput, setQrInput] = useState('');
-  
-  // POS Scan alert states
   const [posState, setPosState] = useState('idle'); // idle, success, error
-  const [posResult, setPosResult] = useState({
-    workerName: '',
-    companyName: '',
-    menuName: '',
-    remainingBalance: 0,
-    errorMsg: ''
-  });
-  const [posOpacity, setPosOpacity] = useState(1); // 1 to 0 fade out
-  const fadeTimeoutRef = useRef(null);
-  const hideTimeoutRef = useRef(null);
-
-  // SCM Form States
-  const [scmItem, setScmItem] = useState('');
-  const [scmQty, setScmQty] = useState('');
-  const [scmPrice, setScmPrice] = useState('');
-  const [scmUnit, setScmUnit] = useState('개');
-  const [cart, setCart] = useState([]);
-
-  // KPI Detail States
-  const [activeKpiDetail, setActiveKpiDetail] = useState(null); // null, sales, b2b, labor, lease
-  const [isLaborCoordinating, setIsLaborCoordinating] = useState(false);
-  const [laborMsg, setLaborMsg] = useState('');
-  const [rechargeAmounts, setRechargeAmounts] = useState({});
-  const [recruitingStatus, setRecruitingStatus] = useState({ b3: 'active' });
-
-  const handleQtyChange = (itemId, val) => {
-    let num = parseInt(val, 10);
-    if (isNaN(num) || num < 0) {
-      num = 0;
-    }
-    const item = standardCatalog.find(c => c.id === itemId);
-    if (!item) return;
-
-    setCart(prev => {
-      if (num === 0) {
-        return prev.filter(c => c.id !== itemId);
-      }
-      const existing = prev.find(c => c.id === itemId);
-      if (existing) {
-        return prev.map(c => c.id === itemId ? { ...c, quantity: num } : c);
-      } else {
-        return [...prev, { ...item, quantity: num }];
-      }
-    });
-  };
-
-  // ----------------------------------------------------
-  // DYNAMIC QR COUNTDOWN & REFRESH LOGIC
-  // ----------------------------------------------------
-  useEffect(() => {
-    if (!loggedInWorker) {
-      setWorkerQRValue('');
-      return;
-    }
-
-    setWorkerQRValue(loggedInWorker.qrCode + "_" + Math.floor(100 + Math.random() * 900));
-    setQrCodeTimer(30);
-
-    const interval = setInterval(() => {
-      setQrCodeTimer(prev => {
-        if (prev <= 1) {
-          setWorkerQRValue(loggedInWorker.qrCode + "_" + Math.floor(100 + Math.random() * 900));
-          return 30;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [loggedInWorker]);
+  const [virtualAccountModalOpen, setVirtualAccountModalOpen] = useState(false);
+  const [chargeInput, setChargeInput] = useState('');
+  const [qrModalWorker, setQrModalWorker] = useState(null);
 
   // Sync theme to document element
   useEffect(() => {
@@ -187,316 +164,66 @@ export default function App() {
   // Handle B2B company switch
   const activeCompany = companies.find(c => c.id === selectedCompanyId) || companies[0] || { id: 'c1', name: '-', balance: 0, businessNumber: '-' };
 
-  // Total B2B Balance
-  const totalB2BBalance = companies.reduce((acc, curr) => acc + curr.balance, 0);
-
-  // ----------------------------------------------------
-  // QR POS CHECKOUT FLOW WITH 3-SECOND FADE OUT
-  // ----------------------------------------------------
-  const handleQRCheckout = (codeToScan) => {
-    // Clear existing timers
-    if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-    if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
-    
-    // Reset opacity and state
-    setPosOpacity(1);
-
-    const price = selectedMenu === '양평해장국 특' ? 11000 : 
-                  selectedMenu === '국내산 돈육 삼겹살' ? 18000 : 
-                  selectedMenu === '무항생제 영계 삼계탕' ? 16000 : 9000;
-
-    const res = scanQRAndPay(codeToScan, selectedStore, price, selectedMenu);
-
-    if (res.success) {
-      setPosState('success');
-      setPosResult({
-        workerName: res.workerName,
-        companyName: res.companyName,
-        menuName: res.menuName,
-        remainingBalance: res.remainingBalance,
-        errorMsg: ''
-      });
-      setQrInput('');
-
-      // Start fade out after 2.5s (to complete in 3.0s)
-      fadeTimeoutRef.current = setTimeout(() => {
-        setPosOpacity(0);
-      }, 2500);
-
-      // Reset to idle after 3s complete
-      hideTimeoutRef.current = setTimeout(() => {
-        setPosState('idle');
-      }, 3000);
-
-    } else {
-      setPosState('error');
-      setPosResult({
-        workerName: '',
-        companyName: '',
-        menuName: '',
-        remainingBalance: 0,
-        errorMsg: res.message
-      });
-      
-      // Error alerts do not fade out automatically to let the cashier read the reason
-    }
-  };
-
   // Reset function wrap
   const handleReset = () => {
     resetToInitial();
     setSelectedCompanyId('c4');
     setPosState('idle');
     setQrInput('');
+    setLoggedInWorker(null);
+    setLoginPhone('');
   };
 
-  // Sales by Store for ECharts (Phase 4 Pie Chart)
-  const getSalesChartOption = () => {
-    const defaultStores = [
-      { name: '유림푸드 중화식당', color: '#3b82f6' },
-      { name: '양평신내서울해장국', color: '#ef4444' },
-      { name: '분식집', color: '#f59e0b' },
-      { name: '삼계탕&염소탕', color: '#10b981' },
-      { name: '장어&고기', color: '#8b5cf6' },
-      { name: 'CU 편의점', color: '#ec4899' }
-    ];
 
-    const storeSales = sales.reduce((acc, sale) => {
-      acc[sale.storeName] = (acc[sale.storeName] || 0) + sale.amount;
-      return acc;
-    }, {});
 
-    const displayData = defaultStores.map(store => ({
-      value: storeSales[store.name] || 0,
-      name: store.name.replace('유림푸드 ', '').replace('양평신내서울', ''),
-      itemStyle: { color: store.color }
-    }));
 
-    return {
-      backgroundColor: 'transparent',
-      tooltip: {
-        trigger: 'item',
-        formatter: (params) => {
-          return `<div class="p-2 font-sans bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-md">
-            <span class="font-bold">${params.name}</span><br/>
-            <span>매출: <b>${params.value.toLocaleString()}원</b> (${params.percent}%)</span>
-          </div>`;
-        }
-      },
-      legend: {
-        orient: 'horizontal',
-        bottom: '0',
-        textStyle: { color: theme === 'dark' ? '#a1a1aa' : '#52525b', fontSize: 10 }
-      },
-      series: [
-        {
-          name: '매출 기여도',
-          type: 'pie',
-          radius: ['40%', '65%'],
-          center: ['50%', '42%'],
-          avoidLabelOverlap: true,
-          itemStyle: {
-            borderRadius: 4,
-            borderColor: theme === 'dark' ? '#09090b' : '#ffffff',
-            borderWidth: 2
-          },
-          label: {
-            show: true,
-            position: 'outside',
-            formatter: '{b}\n{d}%',
-            color: theme === 'dark' ? '#a1a1aa' : '#52525b',
-            fontSize: 10
-          },
-          emphasis: {
-            label: { show: true, fontSize: 11, fontWeight: 'bold' }
-          },
-          data: displayData
-        }
-      ]
-    };
-  };
 
-  // Hourly Traffic and Meal checkout Area Chart (Phase 4)
-  const getTrafficChartOption = () => {
-    const xAxisData = ['06:00', '08:00', '10:00', '11:00', '11:30', '12:00', '12:30', '13:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
-    const trafficData = [25, 80, 45, 90, 220, 380, 290, 150, 60, 50, 180, 95, 30];
 
-    return {
-      backgroundColor: 'transparent',
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params) => {
-          const item = params[0];
-          return `<div class="p-2 font-sans bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-md">
-            <span class="font-bold">${item.name}</span><br/>
-            <span>유동인구/식수: <b>${item.value}명</b></span>
-          </div>`;
-        }
-      },
-      grid: { left: '3%', right: '4%', bottom: '8%', top: '12%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: xAxisData,
-        axisLabel: { color: theme === 'dark' ? '#a1a1aa' : '#52525b', fontSize: 10 },
-        axisLine: { lineStyle: { color: theme === 'dark' ? '#27272a' : '#e4e4e7' } }
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: { color: theme === 'dark' ? '#a1a1aa' : '#52525b', fontSize: 10 },
-        splitLine: { lineStyle: { color: theme === 'dark' ? '#27272a' : '#e4e4e7' } }
-      },
-      series: [
-        {
-          name: '유동인구 및 식수',
-          type: 'line',
-          smooth: true,
-          symbol: 'circle',
-          symbolSize: 6,
-          data: trafficData,
-          itemStyle: { color: '#ef4444' },
-          lineStyle: { width: 3 },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(239, 68, 68, 0.3)' },
-                { offset: 1, color: 'rgba(239, 68, 68, 0.0)' }
-              ]
-            }
-          },
-          markArea: {
-            itemStyle: {
-              color: theme === 'dark' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.09)'
-            },
-            data: [
-              [
-                {
-                  name: '점심 피크\n(11:30~13:00)',
-                  xAxis: '11:30',
-                  label: {
-                    position: 'insideTop',
-                    color: theme === 'dark' ? '#fca5a5' : '#b91c1c',
-                    fontSize: 9,
-                    fontWeight: 'bold',
-                    offset: [0, 8]
-                  }
-                },
-                {
-                  xAxis: '13:00'
-                }
-              ]
-            ]
+
+  // ============================================================
+  // 인증 게이트 (Auth Gate)
+  // ============================================================
+  // authLoading: Firebase가 이전 로그인 기록을 확인하는 중 (보통 1~2초)
+  // 이 시간 동안 빈 화면이 깜빡이지 않도록 로딩 스피너를 보여줍니다.
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #0f0c29, #302b63)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 16,
+      }}>
+        <div style={{ fontSize: 52 }}>🍜</div>
+        <div style={{
+          width: 40, height: 40, border: '4px solid rgba(255,255,255,0.2)',
+          borderTop: '4px solid #6366f1', borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>유림푸드 ERP 로딩 중...</p>
+      </div>
+    );
+  }
+
+  // currentUser가 없으면(= 로그아웃 상태) 로그인 페이지를 보여줌
+  // 인부는 전화번호 로그인으로 Worker_Mobile 화면으로 직접 진입
+  if (!currentUser) {
+    return (
+      <LoginPage
+        onWorkerPhoneLogin={(phone) => {
+          // 인부는 Firebase Auth 없이 전화번호로 기존 방식 사용
+          const found = workers.find(w => w.phone === phone);
+          if (found) {
+            setLoggedInWorker(found);
+            setRole('Worker_Mobile');
+            setIsLoggedIn(true);
+          } else {
+            alert('등록되지 않은 전화번호입니다. 담당자에게 문의하세요.');
           }
-        }
-      ]
-    };
-  };
-
-  const getScmSavingsChartOption = () => {
-    const savingsByItem = orders.reduce((acc, order) => {
-      if (order.status === 'approved' && order.discountPercent > 0) {
-        const original = order.originalPrice || order.price;
-        const discountAmt = (original - (order.negotiatedPrice || order.price)) * order.quantity;
-        acc[order.itemName] = (acc[order.itemName] || 0) + discountAmt;
-      }
-      return acc;
-    }, {});
-
-    const items = Object.keys(savingsByItem);
-    const data = Object.values(savingsByItem);
-
-    if (items.length === 0) {
-      return {
-        backgroundColor: 'transparent',
-        title: { 
-          text: '공동구매 절감 내역 없음', 
-          left: 'center', 
-          top: 'center', 
-          textStyle: { color: theme === 'dark' ? '#71717a' : '#a1a1aa', fontSize: 12 } 
-        }
-      };
-    }
-
-    return {
-      backgroundColor: 'transparent',
-      tooltip: {
-        trigger: 'item',
-        formatter: (params) => `<div class="p-2 font-sans bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-md">
-          <span>${params.name}: <b>${params.value.toLocaleString()}원 절감</b> (${params.percent}%)</span>
-        </div>`
-      },
-      series: [
-        {
-          name: '품목별 절감액',
-          type: 'pie',
-          radius: ['40%', '65%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 4,
-            borderColor: theme === 'dark' ? '#09090b' : '#ffffff',
-            borderWidth: 1.5
-          },
-          label: {
-            show: true,
-            position: 'outside',
-            formatter: '{b}\n{c}원',
-            color: theme === 'dark' ? '#a1a1aa' : '#52525b',
-            fontSize: 10
-          },
-          data: items.map((item, idx) => ({
-            value: savingsByItem[item],
-            name: item,
-            itemStyle: {
-              color: ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444'][idx % 6]
-            }
-          }))
-        }
-      ]
-    };
-  };
-  const pendingOrders = orders.filter(o => o.status === 'pending');
-  const consolidatedMap = {};
-  pendingOrders.forEach(o => {
-    if (!consolidatedMap[o.itemName]) {
-      consolidatedMap[o.itemName] = {
-        itemName: o.itemName,
-        unit: o.unit,
-        totalQuantity: 0,
-        originalPrice: o.originalPrice || o.price,
-        numStores: 0,
-        stores: new Set()
-      };
-    }
-    consolidatedMap[o.itemName].totalQuantity += o.quantity;
-    consolidatedMap[o.itemName].stores.add(o.storeName);
-  });
-
-  const consolidatedList = Object.values(consolidatedMap).map(c => {
-    c.numStores = c.stores.size;
-    let discount = 0.05;
-    if (c.totalQuantity >= 100) discount = 0.20;
-    else if (c.totalQuantity >= 50) discount = 0.15;
-    else if (c.totalQuantity >= 20) discount = 0.10;
-    
-    c.discountPercent = Math.round(discount * 100);
-    c.negotiatedPrice = Math.round(c.originalPrice * (1 - discount));
-    c.savings = (c.originalPrice - c.negotiatedPrice) * c.totalQuantity;
-    return c;
-  });
-
-  const pendingOriginalTotal = pendingOrders.reduce((sum, o) => sum + (o.originalPrice || o.price) * o.quantity, 0);
-  const pendingNegotiatedTotal = consolidatedList.reduce((sum, c) => sum + (c.negotiatedPrice * c.totalQuantity), 0);
-  const pendingSavings = pendingOriginalTotal - pendingNegotiatedTotal;
-  const pendingSavingsRate = pendingOriginalTotal > 0 ? (pendingSavings / pendingOriginalTotal) * 100 : 0;
-
-  const vacantCount = buildings ? buildings.filter(b => b.officeVacant).length : 1;
-  const occupancyRate = buildings ? (((buildings.length - vacantCount) / buildings.length) * 100).toFixed(1) : '83.3';
-  const unpaidBuildingsCount = buildings ? buildings.filter(b => !b.rentPaid).length : 1;
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 transition-colors duration-300 flex flex-col font-sans">
@@ -504,45 +231,46 @@ export default function App() {
       {/* ---------------------------------------------------- */}
       {/* TOP HEADER */}
       {/* ---------------------------------------------------- */}
-      <header className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md py-4 px-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-600 rounded-lg text-white">
-            <Building2 className="w-6 h-6" />
+      <header className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md py-3 px-4 md:py-4 md:px-6 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0">
+        <div className="flex items-center gap-2 md:gap-3 mr-auto md:mr-0">
+          <div className="p-1.5 md:p-2 bg-blue-600 rounded-lg text-white">
+            <Building2 className="w-5 h-5 md:w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight">유림푸드 F&B 타운 통합 ERP</h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">Yulim Food Digital Smart Solution v1.0</p>
+            <h1 className="text-base md:text-xl font-extrabold tracking-tight">유림푸드 F&B 타운 통합 ERP</h1>
+            <p className="text-[10px] md:text-xs text-zinc-500 dark:text-zinc-400 font-mono hidden sm:block">Yulim Food Digital Smart Solution v1.0</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end">
           {/* Active Role Info Suffix Badge */}
           {isLoggedIn && (
-            <span className="text-[10px] font-black tracking-wide text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900/50 px-2.5 py-1.5 rounded-lg border border-zinc-200/50 dark:border-zinc-800/50 flex items-center gap-1.5 font-mono shadow-sm">
+            <span className="text-[9px] md:text-[10px] font-black tracking-wide text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900/50 px-2 py-1 md:px-2.5 md:py-1.5 rounded-lg border border-zinc-200/50 dark:border-zinc-800/50 flex items-center gap-1 md:gap-1.5 font-mono shadow-sm">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               {role === 'Super_Admin' && '👑 최고 관리자'}
-              {role === 'Client_B2B' && `🤝 B2B [${activeCompany.name.split(' ')[0]}]`}
-              {role === 'Store_Manager' && `🖥️ POS [${selectedStore.substring(0, 5)}]`}
-              {role === 'Worker_Mobile' && `📱 근로자 [${loggedInWorker ? loggedInWorker.name : '미인증'}]`}
-              {role === 'Kitchen_KDS' && `👨‍🍳 주방 [${selectedKdsStore.substring(0, 5)}]`}
+              {role === 'Client_B2B' && `🤝 협력사 [${activeCompany.name.split(' ')[0]}]`}
+              {role === 'Store_Manager' && `🖥️ 매장결제 [${selectedStore.substring(0, 5)}]`}
+              {role === 'Worker_Mobile' && `📱 근로자식권 [${loggedInWorker ? loggedInWorker.name : '미인증'}]`}
+              {role === 'Kitchen_KDS' && `👨‍🍳 주방주문 [${selectedKdsStore.substring(0, 5)}]`}
+              {role === 'User_Guide' && '📖 시스템 설명서'}
             </span>
           )}
 
           {/* Active Role Selector Tab */}
-          <div className="bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg flex gap-1 border border-zinc-200/50 dark:border-zinc-800/50">
+          <div className="bg-zinc-100 dark:bg-zinc-900 p-0.5 md:p-1 rounded-lg flex flex-wrap gap-0.5 md:gap-1 border border-zinc-200/50 dark:border-zinc-800/50 max-w-full overflow-x-auto">
             {/* Super Admin */}
             <div className="relative group">
               <button 
                 onClick={() => { setRole('Super_Admin'); setIsLoggedIn(true); }} 
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Super_Admin' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
               >
-                Super Admin
+                최고 관리자
               </button>
               
               {/* Tooltip Popup */}
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
                 <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-                  <Building2 className="w-4 h-4" /> 최고 관리자 (Super Admin) 사용방법
+                  <Building2 className="w-4 h-4" /> 최고 관리자 사용방법
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
                   F&B 타운 전체의 자금 흐름과 프롭테크 임대 정보를 총괄하는 최고 관리 권한입니다.
@@ -574,13 +302,13 @@ export default function App() {
                 onClick={() => { setRole('Client_B2B'); setIsLoggedIn(true); }} 
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Client_B2B' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
               >
-                B2B Portal (식권대장)
+                협력사 식권관리
               </button>
               
               {/* Tooltip Popup */}
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
                 <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                  <Users className="w-4 h-4" /> B2B Portal 사용방법
+                  <Users className="w-4 h-4" /> 협력사 식권관리 사용방법
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
                   협력 건설사가 근로자들의 장부 식권을 배포하고 정산하는 관리 페이지입니다.
@@ -608,15 +336,15 @@ export default function App() {
                 onClick={() => { setRole('Store_Manager'); setIsLoggedIn(true); }} 
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Store_Manager' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
               >
-                Store POS & Scanner
+                매장 결제관리
               </button>
               
               {/* Tooltip Popup */}
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
                 <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                  <ShoppingBag className="w-4 h-4" /> Store POS 사용방법
+                  <ShoppingBag className="w-4 h-4" /> 매장 결제관리 사용방법
                 </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                   F&B 타운 입점 식당 카운터에서 식사 결제를 승인하고 식자재를 발주하는 화면입니다.
                 </p>
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
@@ -642,15 +370,15 @@ export default function App() {
                 onClick={() => { setRole('Worker_Mobile'); setIsLoggedIn(true); }} 
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Worker_Mobile' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
               >
-                인부 모바일 식권
+                근로자 식권관리
               </button>
               
               {/* Tooltip Popup */}
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
                 <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
-                  <QrCode className="w-4 h-4" /> Worker Mobile 사용방법
+                  <QrCode className="w-4 h-4" /> 근로자 식권관리 사용방법
                 </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                   현장 근로자가 스마트폰으로 식사를 인증하는 모바일 웹 앱 화면입니다.
                 </p>
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
@@ -676,15 +404,15 @@ export default function App() {
                 onClick={() => { setRole('Kitchen_KDS'); setIsLoggedIn(true); }} 
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'Kitchen_KDS' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
               >
-                주방 KDS 모니터
+                주방 주문관리
               </button>
               
               {/* Tooltip Popup */}
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left">
                 <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
-                  <Flame className="w-4 h-4" /> Kitchen KDS 사용방법
+                  <Flame className="w-4 h-4" /> 주방 주문관리 사용방법
                 </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                   각 식당 주방에 설치되어 실시간 주문 조리 현황을 관리하는 모니터입니다.
                 </p>
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1 text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold font-sans">
@@ -703,7 +431,69 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* System User Guide */}
+            <div className="relative group">
+              <button 
+                onClick={() => { setRole('User_Guide'); setIsLoggedIn(true); }} 
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${role === 'User_Guide' ? 'bg-blue-600 text-white shadow' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'}`}
+              >
+                시스템 설명서 📖
+              </button>
+              
+              {/* Tooltip Popup */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 origin-top text-left font-sans">
+                <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                  <FileText className="w-4 h-4" /> 통합 사용설명서 안내
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium">
+                  각 메뉴별(최고관리자, 협력사, POS, 근로자, 주방) 상세 사용 방법 및 최근 시스템 업그레이드 내역을 확인합니다.
+                </p>
+              </div>
+            </div>
           </div>
+
+          {/* ── 실시간 동기화 상태 배지 (새로 추가) ── */}
+          {/* 서버와 연결이 잘 되고 있는지 한눈에 보여주는 작은 표시 */}
+          {isLoggedIn && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold font-mono tracking-wide shadow-sm transition-all duration-500"
+              style={{
+                // 상태에 따라 색상이 바뀜: 초록(연결) / 빨강(끊김) / 노랑(동기화중)
+                background: connectionStatus === 'connected' ? 'rgba(16,185,129,0.08)'
+                          : connectionStatus === 'disconnected' ? 'rgba(239,68,68,0.08)'
+                          : 'rgba(234,179,8,0.08)',
+                borderColor: connectionStatus === 'connected' ? 'rgba(16,185,129,0.25)'
+                           : connectionStatus === 'disconnected' ? 'rgba(239,68,68,0.25)'
+                           : 'rgba(234,179,8,0.25)',
+                color: connectionStatus === 'connected' ? '#10b981'
+                     : connectionStatus === 'disconnected' ? '#ef4444'
+                     : '#eab308',
+              }}
+            >
+              {/* 상태 점: 연결됨이면 깜빡, 끊기면 고정, 동기화중이면 회전 */}
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+                background: connectionStatus === 'connected' ? '#10b981'
+                          : connectionStatus === 'disconnected' ? '#ef4444'
+                          : '#eab308',
+                animation: connectionStatus === 'connected' ? 'pulse 2s infinite'
+                         : connectionStatus === 'syncing' ? 'pulse 0.8s infinite'
+                         : 'none',
+              }} />
+
+              {/* 상태 텍스트 */}
+              <span>
+                {connectionStatus === 'connected' && '서버 연결됨'}
+                {connectionStatus === 'disconnected' && '오프라인 모드'}
+                {connectionStatus === 'syncing' && '동기화 중...'}
+              </span>
+
+              {/* 마지막 동기화 시각 (연결된 상태에서만 표시) */}
+              {connectionStatus === 'connected' && lastSyncTime && (
+                <SyncTimeAgo lastSyncTime={lastSyncTime} />
+              )}
+            </div>
+          )}
 
           {/* Theme Toggle */}
           <button 
@@ -726,6 +516,8 @@ export default function App() {
           {isLoggedIn && (
             <button 
               onClick={() => {
+                // Firebase Auth 로그아웃 + 로컬 상태 초기화
+                logout();
                 setIsLoggedIn(false);
                 setRole('Login');
                 setLoggedInWorker(null);
@@ -755,14 +547,16 @@ export default function App() {
                   {role === 'Super_Admin' ? '건물주 / 총괄 관리자 모드' : 
                    role === 'Client_B2B' ? '협력 건설사 장부 관리 포털' : 
                    role === 'Store_Manager' ? '매장 POS 및 식자재 발주 연동' :
-                   role === 'Worker_Mobile' ? '현장 근로자용 모바일 식권 앱' : '식당 주방 주문 KDS 모니터'}
+                   role === 'Worker_Mobile' ? '현장 근로자용 모바일 식권 앱' : 
+                   role === 'User_Guide' ? '통합 시스템 사용 가이드 및 요구사항' : '식당 주방 주문 KDS 모니터'}
                 </span>
               </div>
               <h2 className="text-2xl font-bold tracking-tight">
                 {role === 'Super_Admin' ? 'F&B 타운 전사적 자원 관리 대시보드' : 
                  role === 'Client_B2B' ? 'B2B 달장부 잔액 및 식수 정산 관리' : 
                  role === 'Store_Manager' ? `${selectedStore} 태블릿 POS 카운터` :
-                 role === 'Worker_Mobile' ? '내 스마트폰 모바일 식권' : `${selectedKdsStore} 주방 KDS 화면`}
+                 role === 'Worker_Mobile' ? '내 스마트폰 모바일 식권' : 
+                 role === 'User_Guide' ? '유림푸드 ERP 사용설명서 & 업그레이드 리포트' : `${selectedKdsStore} 주방 KDS 화면`}
               </h2>
             </div>
             
@@ -863,8 +657,8 @@ export default function App() {
                     <Users className="w-6 h-6 text-indigo-400" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">B2B Portal</h3>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">건설사 식권대장</p>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">협력사 식권관리</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium font-sans">협력업체 대시보드</p>
                   </div>
                   <span className="text-[9px] font-extrabold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded">
                     식수 정산 관리
@@ -874,7 +668,7 @@ export default function App() {
                 {/* Tooltip Popup */}
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
                   <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                    <Users className="w-4 h-4" /> B2B Portal 사용방법
+                    <Users className="w-4 h-4" /> 협력사 식권관리 사용방법
                   </div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                     협력 건설사가 근로자들의 장부 식권을 배포하고 정산하는 관리 페이지입니다.
@@ -886,7 +680,7 @@ export default function App() {
                     </div>
                     <div className="flex items-start gap-1">
                       <span className="text-indigo-500 font-bold">•</span>
-                      <span>소속 근로자 등록 및 일일 25,000 P 포인트 식권 즉시 발급</span>
+                      <span>소속 근로자 등록 및 일일 포인트 식권 즉시 발급</span>
                     </div>
                     <div className="flex items-start gap-1">
                       <span className="text-indigo-500 font-bold">•</span>
@@ -913,8 +707,8 @@ export default function App() {
                     <ShoppingBag className="w-6 h-6 text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Store POS</h3>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">식당 포스기</p>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">매장 결제관리</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium font-sans">식당 포스기</p>
                   </div>
                   <span className="text-[9px] font-extrabold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded">
                     식사 결제/발주
@@ -924,7 +718,7 @@ export default function App() {
                 {/* Tooltip Popup */}
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
                   <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                    <ShoppingBag className="w-4 h-4" /> Store POS 사용방법
+                    <ShoppingBag className="w-4 h-4" /> 매장 결제관리 사용방법
                   </div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                     F&B 타운 입점 식당 카운터에서 식사 결제를 승인하고 식자재를 발주하는 화면입니다.
@@ -963,8 +757,8 @@ export default function App() {
                     <QrCode className="w-6 h-6 text-purple-400" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Worker Mobile</h3>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">근로자 식권 앱</p>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">근로자 식권관리</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium font-sans">모바일 식권</p>
                   </div>
                   <span className="text-[9px] font-extrabold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">
                     OTP QR 모바일 식권
@@ -974,7 +768,7 @@ export default function App() {
                 {/* Tooltip Popup */}
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
                   <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
-                    <QrCode className="w-4 h-4" /> Worker Mobile 사용방법
+                    <QrCode className="w-4 h-4" /> 근로자 식권관리 사용방법
                   </div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                     현장 근로자가 스마트폰으로 식사를 인증하는 모바일 웹 앱 화면입니다.
@@ -1012,8 +806,8 @@ export default function App() {
                     <Flame className="w-6 h-6 text-rose-400" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">Kitchen KDS</h3>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium">주방 오더 모니터</p>
+                    <h3 className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100">주방 주문관리</h3>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium font-sans">주방 오더 모니터</p>
                   </div>
                   <span className="text-[9px] font-extrabold bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded">
                     실시간 주문 접수
@@ -1023,7 +817,7 @@ export default function App() {
                 {/* Tooltip Popup */}
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-80 p-4 rounded-xl border bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl backdrop-blur-md text-zinc-900 dark:text-zinc-100 z-50 opacity-0 scale-95 pointer-events-none group-hover/card:opacity-100 group-hover/card:scale-100 transition-all duration-200 origin-bottom text-left">
                   <div className="font-extrabold text-xs mb-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
-                    <Flame className="w-4 h-4" /> Kitchen KDS 사용방법
+                    <Flame className="w-4 h-4" /> 주방 주문관리 사용방법
                   </div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-2 font-medium font-sans">
                     각 식당 주방에 설치되어 실시간 주문 조리 현황을 관리하는 모니터입니다.
@@ -1243,1343 +1037,21 @@ export default function App() {
         {/* VIEW 1: SUPER_ADMIN */}
         {/* ---------------------------------------------------- */}
         {role === 'Super_Admin' && (
-          <div className="flex flex-col gap-6">
-            
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div 
-                onClick={() => setActiveKpiDetail(prev => prev === 'sales' ? null : 'sales')}
-                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
-                  activeKpiDetail === 'sales' 
-                    ? 'border-emerald-500 ring-2 ring-emerald-500 bg-emerald-50/5 dark:bg-emerald-950/10' 
-                    : 'border-zinc-200 dark:border-zinc-800'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
-                    <span className="text-sm font-medium">금일 타운 총매출액</span>
-                    <TrendingUp className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <div className="text-2xl font-black font-mono">
-                    {sales.reduce((acc, c) => acc + c.amount, 0).toLocaleString()}원
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs">
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-0.5">
-                    +14.8% ▲
-                  </span>
-                  <span className="text-zinc-500">전일 대비 증감율</span>
-                </div>
-              </div>
-
-              <div 
-                onClick={() => setActiveKpiDetail(prev => prev === 'b2b' ? null : 'b2b')}
-                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
-                  activeKpiDetail === 'b2b' 
-                    ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-50/5 dark:bg-blue-950/10' 
-                    : 'border-zinc-200 dark:border-zinc-800'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
-                    <span className="text-sm font-medium">B2B 식권 총 선불 예치금</span>
-                    <DollarSign className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div className="text-2xl font-black font-mono">
-                    {totalB2BBalance.toLocaleString()}원
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-zinc-500">
-                  <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 font-bold">자금 흐름</span>
-                  <span>가용 선결제 자금 흐름 스코어: 우수</span>
-                </div>
-              </div>
-
-              <div 
-                onClick={() => setActiveKpiDetail(prev => prev === 'labor' ? null : 'labor')}
-                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
-                  activeKpiDetail === 'labor' 
-                    ? 'border-amber-500 ring-2 ring-amber-500 bg-amber-50/5 dark:bg-amber-950/10' 
-                    : 'border-zinc-200 dark:border-zinc-800'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
-                    <span className="text-sm font-medium">6개 동 통합 인건비 효율</span>
-                    <Users className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div className="text-2xl font-black font-mono">
-                    2,450,000원
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-zinc-500">
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 font-bold">+8.5% 절감</span>
-                  <span>교차 근무 조율 누적치</span>
-                </div>
-              </div>
-
-              <div 
-                onClick={() => setActiveKpiDetail(prev => prev === 'lease' ? null : 'lease')}
-                className={`cursor-pointer transition-all duration-300 hover:scale-[1.02] bg-white dark:bg-zinc-900 p-5 rounded-2xl border shadow-sm flex flex-col justify-between ${
-                  activeKpiDetail === 'lease' 
-                    ? 'border-purple-500 ring-2 ring-purple-500 bg-purple-50/5 dark:bg-purple-950/10' 
-                    : 'border-zinc-200 dark:border-zinc-800'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
-                    <span className="text-sm font-medium">상층부 임대 및 공실률</span>
-                    <Building2 className="w-5 h-5 text-purple-500" />
-                  </div>
-                  <div className="text-lg font-black tracking-tight">
-                    공실 {vacantCount}개 잔여 / {occupancyRate}% 가동 중
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-zinc-500">
-                  <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-400 font-bold">수익률 6.2%</span>
-                  <span>전월 대비 보합세 유지</span>
-                </div>
-              </div>
-            </div>
-
-            {/* KPI Drilldown Detail Panel (Top-down Collapsible) */}
-            {activeKpiDetail && (
-              <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md animate-fadeIn flex flex-col gap-6">
-                
-                {/* 1. SALES DETAIL PANEL */}
-                {activeKpiDetail === 'sales' && (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                      <div>
-                        <h4 className="text-base font-bold flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                          <TrendingUp className="w-5 h-5" />
-                          금일 타운 매출 상세 분석 (실시간)
-                        </h4>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          타운 내 각 매장의 오늘 매출 기여도와 실시간 결제 분포입니다.
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => setActiveKpiDetail(null)}
-                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">오늘 총 매출</span>
-                        <div className="text-xl font-bold font-mono mt-1 text-emerald-600 dark:text-emerald-400">
-                          {sales.reduce((acc, c) => acc + c.amount, 0).toLocaleString()}원
-                        </div>
-                      </div>
-                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">B2B 식권 결제 건수</span>
-                        <div className="text-xl font-bold font-mono mt-1 text-blue-500">
-                          {sales.filter(s => s.paymentType === 'B2B Coupon').length}건
-                        </div>
-                      </div>
-                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">일반 고객 결제 건수</span>
-                        <div className="text-xl font-bold font-mono mt-1 text-amber-500">
-                          {sales.filter(s => s.paymentType === 'General').length}건
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
-                            <th className="py-3 font-semibold">상점명</th>
-                            <th className="py-3 font-semibold text-right">오늘 총 매출액</th>
-                            <th className="py-3 font-semibold text-center">총 결제 건수</th>
-                            <th className="py-3 font-semibold text-center">B2B 식권</th>
-                            <th className="py-3 font-semibold text-center">일반 결제</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[
-                            { name: '양평신내서울해장국', color: '#ef4444' },
-                            { name: '유림푸드 중화식당', color: '#3b82f6' },
-                            { name: '분식집', color: '#f59e0b' },
-                            { name: '삼계탕&염소탕', color: '#10b981' },
-                            { name: '장어&고기', color: '#8b5cf6' },
-                            { name: 'CU 편의점', color: '#ec4899' }
-                          ].map(store => {
-                            const storeSales = sales.filter(s => s.storeName === store.name);
-                            const totalAmount = storeSales.reduce((sum, s) => sum + s.amount, 0);
-                            const txCount = storeSales.length;
-                            const b2bCount = storeSales.filter(s => s.paymentType === 'B2B Coupon').length;
-                            const generalCount = storeSales.filter(s => s.paymentType === 'General').length;
-
-                            return (
-                              <tr key={store.name} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
-                                <td className="py-3 font-bold flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: store.color }}></span>
-                                  {store.name}
-                                </td>
-                                <td className="py-3 text-right font-bold font-mono">{totalAmount.toLocaleString()}원</td>
-                                <td className="py-3 text-center font-mono">{txCount}건</td>
-                                <td className="py-3 text-center text-blue-500 font-mono font-bold">{b2bCount}건</td>
-                                <td className="py-3 text-center text-amber-500 font-mono font-bold">{generalCount}건</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="mt-4">
-                      <h5 className="text-xs font-bold text-zinc-500 mb-2">실시간 최근 트랜잭션 내역 (최신 5건)</h5>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-[11px] text-zinc-600 dark:text-zinc-300">
-                          <thead>
-                            <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-400">
-                              <th className="py-2 font-medium">시간</th>
-                              <th className="py-2 font-medium">매장</th>
-                              <th className="py-2 font-medium">소속 / 고객명</th>
-                              <th className="py-2 font-medium">주문 메뉴</th>
-                              <th className="py-2 font-medium text-right">결제 금액</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {sales.slice(0, 5).map((sale) => (
-                              <tr key={sale.id} className="border-b border-zinc-100/50 dark:border-zinc-800/30">
-                                <td className="py-2 font-mono text-zinc-400">
-                                  {new Date(sale.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                </td>
-                                <td className="py-2 font-medium">{sale.storeName}</td>
-                                <td className="py-2">
-                                  {sale.paymentType === 'B2B Coupon' ? (
-                                    <span className="text-blue-500 font-semibold">{sale.companyName} ({sale.workerName})</span>
-                                  ) : (
-                                    <span className="text-zinc-500">{sale.workerName}</span>
-                                  )}
-                                </td>
-                                <td className="py-2">{sale.menuName}</td>
-                                <td className="py-2 text-right font-mono font-bold text-zinc-900 dark:text-zinc-100">{sale.amount.toLocaleString()}원</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. B2B BALANCE DETAIL PANEL */}
-                {activeKpiDetail === 'b2b' && (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                      <div>
-                        <h4 className="text-base font-bold flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                          <DollarSign className="w-5 h-5" />
-                          B2B 협력업체 선불 예치금 및 식권 관리
-                        </h4>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          협력사별 예치금 잔액 모니터링, 경고 상태 확인 및 가상 계좌 실시간 충전을 지원합니다.
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => setActiveKpiDetail(null)}
-                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    {companies.some(c => c.balance < 1000000) && (
-                      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-red-800 dark:text-red-300">
-                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                        <div>
-                          <strong>예치금 경고:</strong> 잔액이 1,000,000원 미만인 협력업체가 존재합니다. 즉시 해당 협력사에 선납 요청 알림이 필요합니다.
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
-                            <th className="py-3 font-semibold">협력업체명</th>
-                            <th className="py-3 font-semibold">사업자등록번호</th>
-                            <th className="py-3 font-semibold text-center">누적 이용 포인트</th>
-                            <th className="py-3 font-semibold text-right">가용 예치 잔액</th>
-                            <th className="py-3 font-semibold text-center">운영 상태</th>
-                            <th className="py-3 font-semibold text-center w-64">예치금 즉시 충전</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {companies.map(company => {
-                            const isLow = company.balance < 1000000;
-                            return (
-                              <tr key={company.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
-                                <td className="py-3 font-bold text-zinc-900 dark:text-zinc-100">{company.name}</td>
-                                <td className="py-3 font-mono text-zinc-500">{company.businessNumber}</td>
-                                <td className="py-3 text-center font-mono font-bold text-zinc-700 dark:text-zinc-300">{(company.accumulatedMeals * 9000).toLocaleString()} P</td>
-                                <td className={`py-3 text-right font-mono font-bold ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                                  {company.balance.toLocaleString()}원
-                                </td>
-                                <td className="py-3 text-center">
-                                  {isLow ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30">
-                                      🔴 잔액 부족 경고
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30">
-                                      🟢 정상 운영
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2 text-center">
-                                  <div className="flex items-center gap-1.5 justify-end">
-                                    <input 
-                                      type="number"
-                                      placeholder="충전액(원)"
-                                      value={rechargeAmounts[company.id] || ''}
-                                      onChange={(e) => setRechargeAmounts(prev => ({ ...prev, [company.id]: e.target.value }))}
-                                      className="w-28 px-2 py-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-mono font-bold focus:outline-none"
-                                    />
-                                    <button 
-                                      onClick={() => {
-                                        const amt = Number(rechargeAmounts[company.id]);
-                                        if (!amt || isNaN(amt) || amt <= 0) return;
-                                        chargeCompanyBalance(company.id, amt);
-                                        setRechargeAmounts(prev => ({ ...prev, [company.id]: '' }));
-                                      }}
-                                      className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-sm"
-                                    >
-                                      충전
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. LABOR EFFICIENCY DETAIL PANEL */}
-                {activeKpiDetail === 'labor' && (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                      <div>
-                        <h4 className="text-base font-bold flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                          <Users className="w-5 h-5" />
-                          6개 동 통합 인건비 효율 및 교차 근무 현황
-                        </h4>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          타운 내 다중 요식업 매장 간의 실시간 인력 교차 매칭 지원 현황을 모니터링하고 조율합니다.
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => setActiveKpiDetail(null)}
-                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">이번 달 누적 인건비 절감액</span>
-                        <div className="text-2xl font-black font-mono mt-1 text-emerald-600 dark:text-emerald-400">
-                          2,450,000원 (+8.5%)
-                        </div>
-                      </div>
-                      <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">활성 교차 근무 인원</span>
-                        <div className="text-2xl font-black font-mono mt-1 text-amber-500">
-                          3개 조 (총 4명 현장 투입 중)
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
-                            <th className="py-3 font-semibold">교차 근무 조율 대상 매장</th>
-                            <th className="py-3 font-semibold text-center">지원 인력</th>
-                            <th className="py-3 font-semibold">지원 피크 시간대</th>
-                            <th className="py-3 font-semibold text-center">효율 시너지</th>
-                            <th className="py-3 font-semibold text-center">현재 매칭 상태</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[
-                            { shops: '양평신내서울해장국 ↔ 분식집', count: '2명', time: '점심 피크 (11:00 ~ 13:30)', grade: 'S등급 (최우수)', status: '🟢 매칭 가동 중' },
-                            { shops: '유림푸드 중화식당 ↔ 삼계탕&염소탕', count: '1명', time: '저녁 준비 (16:30 ~ 18:30)', grade: 'A등급 (우수)', status: '🟢 매칭 가동 중' },
-                            { shops: '장어&고기 ↔ CU 편의점', count: '1명', time: '야간 교대 (20:00 ~ 22:00)', grade: 'B등급 (보통)', status: '🟢 매칭 가동 중' }
-                          ].map((item, idx) => (
-                            <tr key={idx} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
-                              <td className="py-3 font-bold text-zinc-900 dark:text-zinc-100">{item.shops}</td>
-                              <td className="py-3 text-center font-semibold text-amber-600 dark:text-amber-400">{item.count}</td>
-                              <td className="py-3 text-zinc-600 dark:text-zinc-400 font-medium">{item.time}</td>
-                              <td className="py-3 text-center font-bold text-emerald-600 dark:text-emerald-400">{item.grade}</td>
-                              <td className="py-3 text-center text-zinc-500 dark:text-zinc-400 font-semibold">{item.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 mt-2 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div>
-                        <h5 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">GCP AI 실시간 유동인구 기반 교차 근무 인력 재배치 조율</h5>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
-                          피크 시간 및 예약 데이터에 맞춰 실시간으로 동 간의 인력 배치 스케줄러를 재가동하여 초과 인건비를 방지합니다.
-                        </p>
-                      </div>
-                      <div>
-                        <button 
-                          disabled={isLaborCoordinating}
-                          onClick={() => {
-                            setIsLaborCoordinating(true);
-                            setLaborMsg('');
-                            setTimeout(() => {
-                              setIsLaborCoordinating(false);
-                              setLaborMsg('교차 조율 성공! 양평신내서울해장국 점심 피크 혼잡도 증가 예상에 따라 분식집 인력 1명을 실시간 추가 지원 교차 배치하였습니다. (추가 비용 절감 예상치: +120,000원)');
-                            }, 1500);
-                          }}
-                          className={`px-4 py-2 rounded-xl text-xs font-extrabold text-white transition-all flex items-center gap-1.5 shadow-md ${
-                            isLaborCoordinating 
-                              ? 'bg-zinc-500 cursor-not-allowed' 
-                              : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
-                          }`}
-                        >
-                          {isLaborCoordinating ? (
-                            <>
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              스케줄 재조율 중...
-                            </>
-                          ) : (
-                            <>
-                              <Activity className="w-3.5 h-3.5" />
-                              🤖 AI 인력 교차 근무 자동 조율 실행
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {laborMsg && (
-                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 p-3.5 rounded-xl flex items-start justify-between gap-2 text-xs text-emerald-800 dark:text-emerald-300 animate-slideDown">
-                        <div className="flex gap-2">
-                          <Check className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                          <div>{laborMsg}</div>
-                        </div>
-                        <button onClick={() => setLaborMsg('')} className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 4. LEASE AND VACANCY DETAIL PANEL */}
-                {activeKpiDetail === 'lease' && (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                      <div>
-                        <h4 className="text-base font-bold flex items-center gap-2 text-purple-600 dark:text-purple-400">
-                          <Building2 className="w-5 h-5" />
-                          유림타운 상층부 오피스 임대 및 공실 현황
-                        </h4>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          각 동 1층 매장과 연동된 2~3층 오피스의 월세 완납/미납 모니터링 및 즉시 납부 독촉장 전송이 가능합니다.
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => setActiveKpiDetail(null)}
-                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 dark:text-zinc-500 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500">
-                            <th className="py-3 font-semibold">건물명 (동)</th>
-                            <th className="py-3 font-semibold">1층 가맹상점</th>
-                            <th className="py-3 font-semibold">상층부 입주사</th>
-                            <th className="py-3 font-semibold">계약 만료일</th>
-                            <th className="py-3 font-semibold text-right">월 임대료</th>
-                            <th className="py-3 font-semibold text-center">임대료 납부</th>
-                            <th className="py-3 font-semibold text-center">공실 여부 / 모집</th>
-                            <th className="py-3 font-semibold text-center w-36">관리 액션</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {buildings.map(building => {
-                            return (
-                              <tr key={building.id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30">
-                                <td className="py-3 font-bold text-zinc-900 dark:text-zinc-100">{building.name}</td>
-                                <td className="py-3 font-medium text-zinc-600 dark:text-zinc-400">{building.storeName}</td>
-                                <td className="py-3 text-zinc-700 dark:text-zinc-300 font-semibold">{building.officeName}</td>
-                                <td className="py-3 font-mono text-zinc-500">{building.expiryDate}</td>
-                                <td className="py-3 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                                  {building.monthlyRent.toLocaleString()}원
-                                </td>
-                                <td className="py-3 text-center">
-                                  {building.rentPaid ? (
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">🟢 완납</span>
-                                  ) : (
-                                    <span className="text-rose-600 dark:text-rose-400 font-bold animate-pulse">🔴 미납</span>
-                                  )}
-                                </td>
-                                <td className="py-3 text-center">
-                                  {building.officeVacant ? (
-                                    <div className="flex flex-col items-center gap-0.5">
-                                      <span className="text-zinc-500 font-bold text-[10px] bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-200/50 dark:border-zinc-700/30">
-                                        ⚪ 공실
-                                      </span>
-                                      <span className="text-[9px] mt-0.5 font-bold">
-                                        {recruitingStatus[building.id] === 'active' || recruitingStatus[building.id] === undefined ? (
-                                          <span className="text-blue-600 dark:text-blue-400">📢 입주사 모집 중</span>
-                                        ) : (
-                                          <span className="text-zinc-400">🔇 모집 보류</span>
-                                        )}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span className="text-zinc-700 dark:text-zinc-300 text-[10px]">입주 완료</span>
-                                  )}
-                                </td>
-                                <td className="py-2 text-center">
-                                  {building.officeVacant ? (
-                                    <button 
-                                      onClick={() => {
-                                        setRecruitingStatus(prev => ({
-                                          ...prev,
-                                          [building.id]: (prev[building.id] === 'active' || prev[building.id] === undefined) ? 'paused' : 'active'
-                                        }));
-                                      }}
-                                      className="px-2 py-1 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                                    >
-                                      모집상태 변경
-                                    </button>
-                                  ) : (
-                                    !building.rentPaid && (
-                                      <button 
-                                        onClick={() => sendDunningNotice(building.id)}
-                                        className="px-2.5 py-1 text-[10px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-sm"
-                                      >
-                                        독촉장 송부
-                                      </button>
-                                    )
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            )}
-
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-blue-500" />
-                  식당별 매출 기여도 비교 (원형 차트)
-                </h3>
-                <div className="h-72">
-                  <ReactECharts option={getSalesChartOption()} style={{ height: '100%' }} />
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-red-500" />
-                  시간대별 유동인구 및 식수 분산 (점심 피크 타임)
-                </h3>
-                <div className="h-72">
-                  <ReactECharts option={getTrafficChartOption()} style={{ height: '100%' }} />
-                </div>
-              </div>
-            </div>
-
-            {/* SCM Procurement Approvals & SCM Savings Analytics */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* SCM 공동구매 관리 판넬 */}
-              <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4 gap-2">
-                    <h3 className="text-sm font-bold flex items-center gap-2">
-                      <Truck className="w-5 h-5 text-blue-600" />
-                      '식봄' 통합 SCM - 식자재 공동구매 협상 대시보드
-                    </h3>
-                    
-                    {/* Tab Buttons */}
-                    <div className="bg-zinc-100 dark:bg-zinc-950 p-0.5 rounded-lg flex border border-zinc-200/50 dark:border-zinc-800/50 text-[10px]">
-                      <button 
-                        onClick={() => setSuperScmTab('consolidated')}
-                        className={`px-3 py-1 rounded-md font-semibold transition-all ${superScmTab === 'consolidated' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500'}`}
-                      >
-                        공동구매 합산 ({consolidatedList.length}건)
-                      </button>
-                      <button 
-                        onClick={() => setSuperScmTab('individual')}
-                        className={`px-3 py-1 rounded-md font-semibold transition-all ${superScmTab === 'individual' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500'}`}
-                      >
-                        개별 대기열 ({orders.filter(o => o.status === 'pending').length}건)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 오늘의 통합 매입 시너지 효과 요약 카드 */}
-                  {superScmTab === 'consolidated' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 shadow-inner">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">오늘의 통합 매입 시너지 효과</span>
-                        <div className="flex items-baseline gap-1.5 mt-1 text-xs">
-                          <span className="text-zinc-500">개별 구매 시 총액:</span>
-                          <span className="font-semibold font-mono text-zinc-400 dark:text-zinc-500 line-through">{pendingOriginalTotal.toLocaleString()}원</span>
-                        </div>
-                        <div className="flex items-baseline gap-1.5 text-xs">
-                          <span className="text-zinc-500">대량 통합 구매 시 총액:</span>
-                          <span className="font-black font-mono text-blue-600 dark:text-blue-400">{pendingNegotiatedTotal.toLocaleString()}원</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col justify-center md:items-end">
-                        <span className="text-[10px] text-zinc-500 font-bold">오늘 아낀 원가 (절감률)</span>
-                        <div className="flex items-baseline gap-1.5 text-emerald-500 font-black">
-                          <span className="text-lg font-mono">+{pendingSavings.toLocaleString()}원</span>
-                          <span className="text-xs">({pendingSavingsRate.toFixed(1)}% 절감)</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 1: CONSOLIDATED SCM VIEW */}
-                  {superScmTab === 'consolidated' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 font-semibold">
-                            <th className="py-2.5 px-3">통합 품목명</th>
-                            <th className="py-2.5 px-3 text-right">전체 필요 수량</th>
-                            <th className="py-2.5 px-3 text-right">최종 제안 도매 단가</th>
-                            <th className="py-2.5 px-3 text-right">총 매입액</th>
-                            <th className="py-2.5 px-3 text-center">공급업체 선택</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {consolidatedList.map((c, idx) => (
-                            <tr key={idx} className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                              <td className="py-3 px-3 font-bold text-xs flex items-center gap-1.5">
-                                <span className="text-base">{standardCatalog.find(item => item.name === c.itemName)?.icon || '🥬'}</span>
-                                {c.itemName}
-                              </td>
-                              <td className="py-3 px-3 text-right font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                                {c.totalQuantity} {c.unit}
-                              </td>
-                              <td className="py-3 px-3 text-right font-mono font-extrabold text-blue-600 dark:text-blue-400">
-                                {c.negotiatedPrice.toLocaleString()}원
-                                <span className="text-[9px] text-emerald-500 ml-1 font-bold">(-{c.discountPercent}%)</span>
-                              </td>
-                              <td className="py-3 px-3 text-right font-mono font-bold">
-                                {(c.negotiatedPrice * c.totalQuantity).toLocaleString()}원
-                              </td>
-                              <td className="py-3 px-3 text-center">
-                                <select className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold focus:outline-none">
-                                  <option value="cj">CJ프레시웨이</option>
-                                  <option value="hyundai">현대그린푸드</option>
-                                  <option value="ourhome">아워홈</option>
-                                  <option value="samsung">삼성웰스토리</option>
-                                </select>
-                              </td>
-                            </tr>
-                          ))}
-                          {consolidatedList.length === 0 && (
-                            <tr>
-                              <td colSpan={5} className="text-center py-12 text-zinc-400 text-sm">
-                                현재 공동구매를 대기 중인 발주 신청서가 없습니다.
-                                <p className="text-xs text-zinc-500 mt-1">각 매장 점장/주방장 화면에서 원자재 공동 발주 신청을 진행하면 이곳에 실시간 합산 집계됩니다.</p>
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* TAB 2: INDIVIDUAL VIEW */}
-                  {superScmTab === 'individual' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 font-semibold">
-                            <th className="py-2.5 px-3">발주 매장</th>
-                            <th className="py-2.5 px-3">발주 품목</th>
-                            <th className="py-2.5 px-3 text-right">수량</th>
-                            <th className="py-2.5 px-3 text-right">기본가</th>
-                            <th className="py-2.5 px-3 text-center">상태</th>
-                            <th className="py-2.5 px-3 text-center">결정</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {orders.map(order => (
-                            <tr key={order.id} className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                              <td className="py-3 px-3 font-semibold text-xs">{order.storeName}</td>
-                              <td className="py-3 px-3 text-xs">{order.itemName}</td>
-                              <td className="py-3 px-3 text-right text-xs font-mono font-bold">
-                                {order.quantity} {order.unit}
-                              </td>
-                              <td className="py-3 px-3 text-right text-xs font-mono">
-                                {((order.originalPrice || order.price) * order.quantity).toLocaleString()}원
-                              </td>
-                              <td className="py-3 px-3 text-center">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  order.status === 'pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400' :
-                                  order.status === 'approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' :
-                                  'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400'
-                                }`}>
-                                  {order.status === 'pending' ? '합산대기' : order.status === 'approved' ? '승인' : '반려'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-center">
-                                {order.status === 'pending' ? (
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button 
-                                      onClick={() => updateSCMOrderStatus(order.id, 'approved')}
-                                      className="p-1 hover:bg-emerald-600 bg-emerald-500 text-white rounded transition-colors"
-                                      title="단일 승인"
-                                    >
-                                      <Check className="w-3 h-3" />
-                                    </button>
-                                    <button 
-                                      onClick={() => updateSCMOrderStatus(order.id, 'rejected')}
-                                      className="p-1 hover:bg-rose-600 bg-rose-500 text-white rounded transition-colors"
-                                      title="반려"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <span className="text-zinc-400 text-xs font-mono">-</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Bulk Negotiation Execution & API/PDF Transmission Buttons */}
-                {/* Bulk Negotiation Execution & API/PDF Transmission Buttons */}
-                {superScmTab === 'consolidated' && (
-                  <div className="mt-6 border-t border-zinc-100 dark:border-zinc-800 pt-4 flex flex-col gap-4">
-                    <div className="text-xs text-zinc-500">
-                      <span className="font-extrabold text-blue-600 dark:text-blue-400">식봄 대량 공동구매 혜택: </span>
-                      합산 발주량이 많을수록 동적 볼륨 할인(5% ~ 20%)이 적용되어 대기업 식자재 매입단가를 즉시 낮춥니다.
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2.5">
-                      <button 
-                        onClick={() => {
-                          const res = consolidateAndNegotiateOrders();
-                          if (res.success) {
-                            setNegoResultModal({
-                              savings: res.savings,
-                              message: res.message
-                            });
-                          } else {
-                            alert(res.message);
-                          }
-                        }}
-                        disabled={consolidatedList.length === 0}
-                        className={`font-extrabold px-5 py-2.5 rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-md ${
-                          consolidatedList.length === 0
-                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                        }`}
-                      >
-                        <Truck className="w-4 h-4" />
-                        대량 공동구매 협상 및 일괄 발주 실행
-                      </button>
-
-                      <button 
-                        onClick={() => {
-                          alert("CJ프레시웨이 통합 SCM API 전송 성공! 마스터 발주서가 전송되었습니다.");
-                        }}
-                        className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 font-extrabold px-5 py-2.5 rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow"
-                      >
-                        <Cpu className="w-4 h-4 text-blue-400" />
-                        CJ프레시웨이 발주서 API 전송
-                      </button>
-
-                      <button 
-                        onClick={() => {
-                          alert("공동구매 원가 절감 명세서 PDF 다운로드가 시작됩니다.");
-                        }}
-                        className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 font-extrabold px-5 py-2.5 rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow"
-                      >
-                        <DollarSign className="w-4 h-4 text-emerald-500" />
-                        명세서 PDF 다운로드
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Columns: SCM Savings Chart & Company Status */}
-              <div className="flex flex-col gap-6">
-                
-                {/* Cumulative SCM Savings Card */}
-                <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-xs font-bold mb-3 flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-emerald-500" />
-                      공동구매 원가 절감 분석 (식봄)
-                    </h3>
-                    
-                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl flex flex-col gap-1 mb-4">
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">공동구매 누적 원가 절감액</span>
-                      <span className="text-xl font-black font-mono text-emerald-800 dark:text-emerald-300">
-                        {totalSavings.toLocaleString()}원
-                      </span>
-                    </div>
-                    
-                    <div className="h-44">
-                      <ReactECharts option={getScmSavingsChartOption()} style={{ height: '100%' }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* B2B Company Directory */}
-                <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                  <h3 className="text-xs font-bold mb-4 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-emerald-500" />
-                    B2B 달장부 협력업체 상태
-                  </h3>
-
-                  <div className="flex flex-col gap-4">
-                    {companies.map(comp => (
-                      <div key={comp.id} className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-extrabold text-sm">{comp.name}</span>
-                          {comp.balance <= 1000000 && (
-                            <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded font-extrabold animate-pulse">
-                              경고: 잔액 부족!
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-zinc-500">
-                          <span>예치 잔액:</span>
-                          <span className={`font-bold font-mono ${comp.balance <= 1000000 ? 'text-rose-500 font-extrabold' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                            {comp.balance.toLocaleString()}원
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-zinc-500">
-                          <span>누적 사용 포인트:</span>
-                          <span className="font-bold text-zinc-700 dark:text-zinc-300 font-mono">
-                            {(comp.accumulatedMeals * 9000).toLocaleString()} P
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* IoT & Facility System */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Proptech IoT Controller */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm lg:col-span-2 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-bold flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-purple-500" />
-                      프롭테크(Proptech) - 6개동 IoT 통합 제어 및 배수구/정화조 스케줄
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col gap-2">
-                      <div className="flex items-center justify-between text-xs text-zinc-500">
-                        <span>식당가 냉난방 제어</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${iot.acStatus === 'auto' ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700' : 'bg-zinc-200 dark:bg-zinc-800'}`}>
-                          {iot.acStatus === 'auto' ? '자동' : '수동'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-lg font-mono">{iot.tempSetting}°C</span>
-                        <div className="flex gap-1">
-                          <button onClick={() => updateTempSetting(Math.max(18, iot.tempSetting - 0.5))} className="w-6 h-6 rounded bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs">-</button>
-                          <button onClick={() => updateTempSetting(Math.min(30, iot.tempSetting + 0.5))} className="w-6 h-6 rounded bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs">+</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col justify-between">
-                      <div className="flex items-center justify-between text-xs text-zinc-500">
-                        <span>에너지 피크 제어</span>
-                        <span className="text-xs font-bold text-zinc-400">Peak Control</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs font-bold">피크 제어 가동</span>
-                        <button 
-                          onClick={toggleAcPeakControl}
-                          className={`w-9 h-5 rounded-full transition-colors relative ${iot.acPeakControl ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}
-                        >
-                          <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all ${iot.acPeakControl ? 'left-4.5' : 'left-0.5'}`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col justify-between">
-                      <div className="flex items-center justify-between text-xs text-zinc-500">
-                        <span>통합 정화조 용량</span>
-                        <span className="text-xs font-bold font-mono">{iot.septicTankLevel}%</span>
-                      </div>
-                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden mt-1.5">
-                        <div className="h-full bg-amber-500" style={{ width: `${iot.septicTankLevel}%` }}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Hynix Predictor */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-                <div>
-                  <h3 className="text-base font-bold mb-3 flex items-center gap-2">
-                    <Cpu className="w-4 h-4 text-blue-500" />
-                    하이닉스 공사 일정 연동 수요 예측
-                  </h3>
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-blue-700 dark:text-blue-400">내일 현장 투입 인원</span>
-                      <span className="font-mono text-blue-800 dark:text-blue-300 font-extrabold">약 4,200명</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Proptech Smart Building Block Map (Phase 4) */}
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
-              <div>
-                <h3 className="text-base font-bold flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  프롭테크 건물 임대 및 관리 스마트 맵
-                </h3>
-                <p className="text-xs text-zinc-500 mt-1">
-                  유림 F&B 타운 내 6개 동의 실시간 임대 수납 상태 및 IoT 에너지 통계 정보입니다. 카드를 클릭하면 상세 모달이 오픈됩니다.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-                {buildings && buildings.map((building) => {
-                  const isUnpaid = !building.rentPaid;
-                  return (
-                    <div
-                      key={building.id}
-                      onClick={() => setSelectedBuilding(building)}
-                      className={`relative bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between h-48 hover:scale-[1.02] ${
-                        isUnpaid
-                          ? 'border-amber-500 bg-amber-500/[0.04] dark:bg-amber-500/[0.02] shadow-[0_0_12px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30'
-                          : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
-                      }`}
-                    >
-                      {/* Top Header inside Block */}
-                      <div>
-                        <div className="flex items-center justify-between gap-1 mb-1.5">
-                          <span className="font-extrabold text-xs font-mono tracking-tight text-zinc-700 dark:text-zinc-300">
-                            {building.name}
-                          </span>
-                          {isUnpaid ? (
-                            <span className="text-[9px] font-extrabold bg-amber-500 text-white px-1.5 py-0.5 rounded animate-pulse">
-                              미납 독촉
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded">
-                              완납
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Stores and Vacancy Info */}
-                        <div className="flex flex-col gap-1 mt-2">
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <span className="px-1 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-extrabold text-[9px]">1F</span>
-                            <span className="truncate text-zinc-600 dark:text-zinc-400 font-semibold">{building.storeName}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <span className="px-1 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 font-extrabold text-[9px]">2F</span>
-                            <span className={`truncate font-semibold ${building.officeVacant ? 'text-amber-500 font-extrabold font-black' : 'text-zinc-600 dark:text-zinc-400'}`}>
-                              {building.officeName}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Bottom values and Dunning Action */}
-                      <div className="mt-3">
-                        <div className="flex justify-between items-center text-[10px] text-zinc-500 mb-1">
-                          <span>월세: <b className="text-zinc-700 dark:text-zinc-300 font-mono">{(building.monthlyRent / 10000).toFixed(0)}만</b></span>
-                          {building.officeVacant && (
-                            <span className="px-1 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-300 font-bold text-[8px]">
-                              공실 있음
-                            </span>
-                          )}
-                        </div>
-
-                        {isUnpaid ? (
-                          <button
-                            id={`dunning-btn-${building.id}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              sendDunningNotice(building.id);
-                              alert(`${building.name} (${building.storeName})에 연체 독촉 고지서가 정상 발송되었습니다. 납부 상태가 완납으로 즉시 전환됩니다.`);
-                            }}
-                            className="w-full text-center bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white font-extrabold text-[10px] py-1.5 rounded-lg transition-all shadow-sm"
-                          >
-                            독촉장 즉시 발송
-                          </button>
-                        ) : (
-                          <div className="text-[10px] text-zinc-400 dark:text-zinc-600 font-mono text-right flex items-center justify-end gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            만기: {building.expiryDate}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Phase 5: B2B Settlement & Billing */}
-            <div className="grid grid-cols-1 gap-6">
-              {/* B2B Settlement & Billing Panel */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
-                <div>
-                  <h3 className="text-base font-bold flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    B2B 정산 대시보드 및 전자세금계산서 가상 발행
-                  </h3>
-                  <p className="text-xs text-zinc-500 mt-1">
-                    협력 건설사별 누적 사용 포인트 및 당월 청구 금액 현황입니다. 국세청 전자세금계산서를 가상으로 즉시 발행할 수 있습니다.
-                  </p>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 font-semibold">
-                        <th className="py-2.5 px-3">협력사명</th>
-                        <th className="py-2.5 px-3">사업자번호</th>
-                        <th className="py-2.5 px-3 text-right">당월 이용 포인트</th>
-                        <th className="py-2.5 px-3 text-right">정산 금액</th>
-                        <th className="py-2.5 px-3 text-center">세금계산서 상태</th>
-                        <th className="py-2.5 px-3 text-center">작업</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {companies.map((comp, idx) => {
-                        const amount = comp.accumulatedMeals * 9000;
-                        const invoice = issuedInvoices[comp.id];
-                        const bizNum = comp.businessNumber || `120-81-${12345 + idx}`;
-                        return (
-                          <tr key={comp.id} className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                            <td className="py-3 px-3 font-extrabold text-xs">{comp.name}</td>
-                            <td className="py-3 px-3 font-mono text-[10px] text-zinc-500">{bizNum}</td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                              {(comp.accumulatedMeals * 9000).toLocaleString()} P
-                            </td>
-                            <td className="py-3 px-3 text-right font-mono font-extrabold text-blue-600 dark:text-blue-400">
-                              {amount.toLocaleString()}원
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              {invoice ? (
-                                <div className="flex flex-col items-center">
-                                  <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 font-extrabold text-[9px]">
-                                    발행완료
-                                  </span>
-                                  <span className="text-[7px] text-zinc-400 font-mono mt-0.5 tracking-tight truncate max-w-[100px]" title={invoice.approvalNumber}>
-                                    {invoice.approvalNumber.substring(0, 17)}...
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold text-[9px]">
-                                  미발행
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    const approvalNumber = `20260617-${Math.floor(10000000 + Math.random() * 90000000)}-${Math.floor(10000000 + Math.random() * 90000000)}`;
-                                    setIssuedInvoices(prev => ({
-                                      ...prev,
-                                      [comp.id]: {
-                                        issuedAt: new Date().toISOString(),
-                                        approvalNumber
-                                      }
-                                    }));
-                                    alert(`[국세청 전자세금계산서 가상 발행 완료]\n\n공급업체: 유림푸드\n공급받는자: ${comp.name}\n사업자번호: ${bizNum}\n합계금액: ${amount.toLocaleString()}원\n\n국세청 승인번호: ${approvalNumber}`);
-                                  }}
-                                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold transition-all shadow-sm"
-                                >
-                                  계산서 발행
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    const headers = "일자,이름,매장,메뉴,금액,정산유형\n";
-                                    const rows = sales
-                                      .filter(s => s.companyName === comp.name)
-                                      .map(s => `${new Date(s.timestamp).toLocaleDateString()},${s.workerName},${s.storeName},${s.menuName || '일반 식사'},${s.amount},B2B식권`)
-                                      .join("\n");
-                                    const blob = new Blob(["\uFEFF" + headers + rows], { type: 'text/csv;charset=utf-8;' });
-                                    const url = URL.createObjectURL(blob);
-                                    const link = document.createElement("a");
-                                    link.setAttribute("href", url);
-                                    link.setAttribute("download", `${comp.name}_식사정산내역_${new Date().toISOString().slice(0,10)}.csv`);
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                  }}
-                                  className="px-2 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded text-[10px] font-bold transition-all"
-                                >
-                                  Excel 다운
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-
-          </div>
+          <SuperAdminPage theme={theme} />
         )}
 
         {/* ---------------------------------------------------- */}
         {/* VIEW 2: CLIENT_B2B (식권대장 B2B 식수 정산 모듈) */}
         {/* ---------------------------------------------------- */}
         {role === 'Client_B2B' && (
-          <div className="flex flex-col gap-6 animate-fadeIn">
-            
-            {/* Top Section: Split Card & Registration Form */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Left Column (Top): Prepaid Balance Overview Card & Recharge */}
-              <div className="lg:col-span-1 bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md flex flex-col justify-between">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">협력업체 식권 관리 계정</span>
-                    
-                    {/* B2B Company switcher */}
-                    <select 
-                      value={selectedCompanyId} 
-                      onChange={(e) => setSelectedCompanyId(e.target.value)}
-                      className="bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none"
-                    >
-                      {companies.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
+          <B2BPortalPage selectedCompanyId={selectedCompanyId} setSelectedCompanyId={setSelectedCompanyId} />
+        )}
 
-                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3">
-                    <span className="text-xs text-zinc-400 block mb-1">현재 선불 예치금 잔액</span>
-                    
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-3xl font-black font-mono text-zinc-900 dark:text-zinc-50">
-                        {activeCompany.balance.toLocaleString()}
-                      </span>
-                      <span className="text-base font-bold text-zinc-500">원</span>
-                      
-                      {/* Blinking Red Warning Badge for balance <= 1,000,000 KRW */}
-                      {activeCompany.balance <= 1000000 && (
-                        <span className="px-2 py-0.5 rounded bg-rose-500 text-white font-extrabold text-[10px] tracking-wide animate-pulse flex items-center gap-1 shadow-sm">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          경고: 잔액 100만원 이하!
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  {/* Recharge Button (Opens Virtual Account Modal) */}
-                  <button 
-                    onClick={() => setVirtualAccountModalOpen(true)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl py-3 text-xs transition-colors flex items-center justify-center gap-2 shadow-md"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    예치금 즉시 충전 (가상계좌 발급)
-                  </button>
-                </div>
-              </div>
-
-              {/* Right Column (Top): New Worker registration with Daily 3 Meals */}
-              <div className="lg:col-span-2 bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md">
-                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
-                  <h3 className="text-sm font-bold flex items-center gap-2">
-                    <Users className="w-4.5 h-4.5 text-blue-600" />
-                    현장 인부 신규 등록 및 식권 배포 (식권대장 B2B)
-                  </h3>
-                  <span className="text-xs text-zinc-400 font-mono">현대건설 등 Hynix 협력사 전용</span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Name field */}
-                  <div className="flex flex-col">
-                    <label className="text-xs font-bold text-zinc-500 mb-1.5">근로자 이름</label>
-                    <input 
-                      type="text" 
-                      placeholder="예: 홍길동"
-                      value={newWorkerName}
-                      onChange={(e) => setNewWorkerName(e.target.value)}
-                      className="w-full bg-[#ffffff] dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    />
-                  </div>
-
-                  {/* Phone field */}
-                  <div className="flex flex-col">
-                    <label className="text-xs font-bold text-zinc-500 mb-1.5">전화번호</label>
-                    <input 
-                      type="text" 
-                      placeholder="예: 010-9999-8888"
-                      value={newWorkerPhone}
-                      onChange={(e) => setNewWorkerPhone(e.target.value)}
-                      className="w-full bg-[#ffffff] dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-5 flex justify-end">
-                  <button 
-                    onClick={() => {
-                      if (!newWorkerName || !newWorkerPhone) {
-                        alert('이름과 전화번호를 모두 입력해 주세요.');
-                        return;
-                      }
-                      // Grant daily 25,000 points
-                      addWorkerToken(activeCompany.id, newWorkerName, newWorkerPhone, 25000);
-                      setNewWorkerName('');
-                      setNewWorkerPhone('');
-                      alert(`${newWorkerName} 님에게 일일 25,000 P 식권 포인트가 정상 지급되었습니다.`);
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-6 py-2.5 text-xs transition-colors flex items-center gap-1.5 shadow"
-                  >
-                    <Plus className="w-4 h-4" />
-                    일일 25,000 P 권한 부여 및 QR 발행
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Middle Section: Active worker cards (Quick check QR codes) */}
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md">
-              <h3 className="text-sm font-bold mb-4 flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
-                <Users className="w-4 h-4 text-emerald-500" />
-                {activeCompany.name} 소속 근로자 식권 리스트 ({workers.filter(w => w.companyId === activeCompany.id).length}명)
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {workers
-                  .filter(w => w.companyId === activeCompany.id)
-                  .map(worker => (
-                    <div key={worker.id} className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-extrabold text-sm">{worker.name}</span>
-                        <span className="text-[10px] text-zinc-400 font-mono">{worker.phone}</span>
-                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 font-mono mt-0.5 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded w-max">
-                          {worker.qrCode}
-                        </span>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold">
-                          잔여 {worker.remainingPoints ? worker.remainingPoints.toLocaleString() : 0} P
-                        </span>
-                        <button 
-                          onClick={() => setQrModalWorker(worker)}
-                          className="px-2 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1"
-                        >
-                          <QrCode className="w-3.5 h-3.5" />
-                          QR코드 보기
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            {/* Bottom Section: Real-time Meal History list (sorted newest first) */}
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-md">
-              <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
-                <Clock className="w-4.5 h-4.5 text-blue-600" />
-                {activeCompany.name} 근로자 실시간 식사 이력 리스트 (최신순)
-              </h3>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 font-semibold">
-                      <th className="py-2.5 px-3">일시</th>
-                      <th className="py-2.5 px-3">이름</th>
-                      <th className="py-2.5 px-3">이용 매장</th>
-                      <th className="py-2.5 px-3">메뉴</th>
-                      <th className="py-2.5 px-3 text-right">금액</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales
-                      .filter(sale => sale.companyName === activeCompany.name)
-                      .map(sale => (
-                        <tr key={sale.id} className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                          <td className="py-3 px-3 text-xs font-mono">
-                            {new Date(sale.timestamp).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-xs">{sale.workerName}</td>
-                          <td className="py-3 px-3 text-xs">{sale.storeName}</td>
-                          <td className="py-3 px-3 text-xs">{sale.menuName || '일반 식사'}</td>
-                          <td className="py-3 px-3 text-right text-xs font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                            {sale.amount.toLocaleString()}원
-                          </td>
-                        </tr>
-                      ))}
-                    {sales.filter(sale => sale.companyName === activeCompany.name).length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="text-center py-8 text-zinc-400 text-sm">
-                          최근 식사 기록이 없습니다. POS 화면에서 결제 시뮬레이션을 실행해 주세요.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
+        {/* ---------------------------------------------------- */}
+        {/* VIEW: USER_GUIDE (유림푸드 ERP 시스템 사용설명서) */}
+        {/* ---------------------------------------------------- */}
+        {role === 'User_Guide' && (
+          <UserGuidePage theme={theme} />
         )}
 
         {/* ---------------------------------------------------- */}
@@ -3079,7 +1551,7 @@ export default function App() {
                           setLoggedInWorker(found);
                           alert(`인증 성공!\n\n${found.name} 님 (${found.companyName}) 환영합니다.`);
                         } else {
-                          alert(`등록된 근로자 정보를 찾을 수 없습니다.\n입력하신 번호: ${cleanPhone}\n\n팁: B2B Portal (식권대장) 화면에서 근로자를 등록할 때 지정한 전화번호를 정확히 입력해 주세요. (예: 010-9999-8888)`);
+                          alert(`등록된 근로자 정보를 찾을 수 없습니다.\n입력하신 번호: ${cleanPhone}\n\n팁: '협력사 식권관리' 화면에서 근로자를 등록할 때 지정한 전화번호를 정확히 입력해 주세요. (예: 010-9999-8888)`);
                         }
                       }}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl py-3.5 text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md mt-2"
@@ -3449,157 +1921,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ---------------------------------------------------- */}
-      {/* SCM NEGO RESULT MODAL */}
-      {/* ---------------------------------------------------- */}
-      {negoResultModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/75 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-md p-6 relative flex flex-col items-center text-center">
-            
-            <button 
-              onClick={() => setNegoResultModal(null)}
-              className="absolute top-4 right-4 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="p-3 bg-emerald-500 rounded-full text-white mb-4 animate-bounce">
-              <Check className="w-8 h-8" />
-            </div>
-
-            <h4 className="text-base font-bold text-zinc-900 dark:text-zinc-50 mb-1">
-              공동구매 단가 네고 타결 완료!
-            </h4>
-            <p className="text-xs text-zinc-500 mb-6">식봄 SCM 유통 파트너 협상 단가 적용서</p>
-
-            <div className="w-full p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 text-left text-xs mb-6 flex flex-col gap-2 font-mono">
-              <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-1">
-                <span className="font-bold">발주 분류:</span>
-                <span>유림푸드 6개 매장 통합 발주</span>
-              </div>
-              <div className="flex justify-between text-zinc-400">
-                <span>기존 원가 총액:</span>
-                <span className="line-through">
-                  {(orders.filter(o => o.status === 'approved' && o.discountPercent > 0).reduce((sum, o) => sum + (o.originalPrice || o.price) * o.quantity, 0) || 0).toLocaleString()}원
-                </span>
-              </div>
-              <div className="flex justify-between text-blue-600 dark:text-blue-400 font-extrabold text-sm">
-                <span>공동구매 협상 총액:</span>
-                <span>
-                  {(orders.filter(o => o.status === 'approved' && o.discountPercent > 0).reduce((sum, o) => sum + (o.negotiatedPrice || o.price) * o.quantity, 0) || 0).toLocaleString()}원
-                </span>
-              </div>
-              <div className="flex justify-between text-emerald-500 font-black text-sm border-t border-dashed border-zinc-200 dark:border-zinc-800 pt-2 mt-1">
-                <span>이번 네고 총 절감액:</span>
-                <span>+{negoResultModal.savings.toLocaleString()}원</span>
-              </div>
-            </div>
-
-            <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-6 px-4 leading-normal">
-              {negoResultModal.message}
-            </p>
-
-            <button 
-              onClick={() => setNegoResultModal(null)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow"
-            >
-              확인 완료
-            </button>
-
-          </div>
-        </div>
-      )}
-
-      {/* ---------------------------------------------------- */}
-      {/* PROPTECH DETAIL LEASE MODAL */}
-      {/* ---------------------------------------------------- */}
-      {selectedBuilding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/75 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-lg p-6 relative shadow-2xl animate-scaleIn">
-            
-            <button 
-              id="close-building-modal-btn"
-              onClick={() => setSelectedBuilding(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-4 mb-4">
-              <div className="p-2.5 bg-purple-100 dark:bg-purple-950/40 rounded-xl text-purple-600 dark:text-purple-400">
-                <Building2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-lg font-black text-zinc-900 dark:text-zinc-50 leading-tight">
-                  {selectedBuilding.name} 상세 임대 정보
-                </h4>
-                <p className="text-xs text-zinc-500 font-mono mt-0.5">유림푸드 F&B 타운 스마트 프롭테크</p>
-              </div>
-            </div>
-
-            {/* Content Specifications */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono text-left mb-6">
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">1층 상가 매장</span>
-                <span className="font-extrabold text-zinc-900 dark:text-zinc-100">{selectedBuilding.storeName}</span>
-              </div>
-
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">2층 사무실 정보</span>
-                <span className={`font-extrabold ${selectedBuilding.officeVacant ? 'text-amber-500 font-extrabold animate-pulse' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                  {selectedBuilding.officeName} {selectedBuilding.officeVacant && '(임대 대기)'}
-                </span>
-              </div>
-
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">임대 계약 만기일</span>
-                <span className="font-extrabold text-zinc-900 dark:text-zinc-100">{selectedBuilding.expiryDate}</span>
-              </div>
-
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 flex flex-col gap-1">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">월세 임대료</span>
-                <span className="font-extrabold text-zinc-900 dark:text-zinc-100">{(selectedBuilding.monthlyRent).toLocaleString()}원</span>
-              </div>
-            </div>
-
-
-
-            {/* Status & Action Footer */}
-            <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 pt-4 mt-6 gap-3">
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-full ${selectedBuilding.rentPaid ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
-                <span className="text-xs font-extrabold">
-                  임대료 수납 상태: {selectedBuilding.rentPaid ? '완납' : '미납 (연체)'}
-                </span>
-              </div>
-
-              <div className="flex gap-2">
-                {!selectedBuilding.rentPaid && (
-                  <button
-                    id="modal-dunning-btn"
-                    onClick={() => {
-                      sendDunningNotice(selectedBuilding.id);
-                      setSelectedBuilding(prev => ({ ...prev, rentPaid: true }));
-                      alert(`${selectedBuilding.name}에 독촉 고지서가 발송되었습니다. 임대 상태가 완납으로 즉시 전환됩니다.`);
-                    }}
-                    className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow active:scale-[0.98]"
-                  >
-                    독촉장 발송
-                  </button>
-                )}
-                <button
-                  id="modal-close-btn"
-                  onClick={() => setSelectedBuilding(null)}
-                  className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-extrabold text-xs px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 transition-all active:scale-[0.98]"
-                >
-                  닫기
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

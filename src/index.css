@@ -28,3 +28,111 @@ code, pre {
 ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
 }
+
+/* ============================================================ */
+/* PREMIUM KEYFRAMES & ANIMATIONS */
+/* ============================================================ */
+
+/* 1. 카메라스캐너 레이저 선 애니메이션 */
+@keyframes scanLine {
+  0% { top: 10%; opacity: 0.8; }
+  50% { top: 90%; opacity: 0.8; }
+  100% { top: 10%; opacity: 0.8; }
+}
+
+/* 2. 결제 실패 시 경고창 쉐이크 효과 */
+@keyframes cardShake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80% { transform: translateX(6px); }
+}
+
+/* 3. 상세 패널 미끄러져 슬라이딩 오픈되는 효과 */
+@keyframes slideDownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 4. KDS 장기 지연 카드의 붉은 펄스 효과 */
+@keyframes pulseRed {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.15), inset 0 0 4px rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.45), inset 0 0 10px rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.8);
+  }
+}
+
+/* 5. 로딩창용 깜빡임 */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.3)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.8)); }
+}
+
+/* 6. 스마트폰 스크린 은은한 플로팅 효과 */
+@keyframes floatPhone {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+/* 7. 그라데이션 보더 백그라운드 흐름 효과 */
+@keyframes borderGlowFlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ============================================================ */
+/* UTIL CLASSES */
+/* ============================================================ */
+.animate-scan {
+  animation: scanLine 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-shake {
+  animation: cardShake 0.4s ease-in-out;
+}
+
+.animate-slide-down-fade {
+  animation: slideDownFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-red {
+  animation: pulseRed 2s infinite ease-in-out;
+}
+
+.animate-float-phone {
+  animation: floatPhone 6s ease-in-out infinite;
+}
+
+.glass-premium {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.dark .glass-premium {
+  background: rgba(9, 9, 11, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.neon-shadow-blue {
+  box-shadow: 0 8px 32px -4px rgba(59, 130, 246, 0.15), 0 0 12px -2px rgba(59, 130, 246, 0.1);
+}
+
+.neon-shadow-emerald {
+  box-shadow: 0 8px 32px -4px rgba(16, 185, 129, 0.15), 0 0 12px -2px rgba(16, 185, 129, 0.1);
+}
+
+.neon-shadow-rose {
+  box-shadow: 0 8px 32px -4px rgba(244, 63, 94, 0.15), 0 0 12px -2px rgba(244, 63, 94, 0.1);
+}
+

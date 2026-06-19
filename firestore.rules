@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// ============================================================
+// Firestore 보안 규칙 (Security Rules)
+// ============================================================
+// "누가 어떤 데이터를 읽고 쓸 수 있는가"를 정의합니다.
+// 
+// 규칙 읽는 법:
+//   match /users/{userId}   → users 컬렉션의 {userId} 문서
+//   allow read: if 조건     → 조건이 true일 때만 읽기 허용
+//   request.auth.uid        → 현재 로그인한 사용자의 고유 ID
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── users 컬렉션 ──────────────────────────────────────────
+    // 로그인한 사용자는 자신의 역할 문서만 읽을 수 있음
+    // (다른 사람의 문서는 볼 수 없음 - 프라이버시 보호)
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // 쓰기는 Admin SDK(서버)에서만 허용 (클라이언트 직접 수정 불가)
+      allow write: if false;
+    }
+
+    // ── 그 외 모든 컬렉션 ────────────────────────────────────
+    // 기본적으로 모두 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -4,6 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
 
 def run_simulation():
     options = Options()
@@ -44,7 +45,13 @@ def run_simulation():
         phone_input.send_keys("010-5555-4444")
         time.sleep(1)
         
-        grant_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), '일일 25,000 P 권한 부여')]")))
+        # Select "반장 (일일 25,000 P)" grade
+        print("Selecting worker grade '반장'...")
+        grade_select = wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(text(), '직급 등급')]/following-sibling::select")))
+        Select(grade_select).select_by_value("반장")
+        time.sleep(1)
+        
+        grant_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), '신규 근로자 식권 배포')]")))
         grant_btn.click()
         time.sleep(1)
         
@@ -58,6 +65,14 @@ def run_simulation():
             
         time.sleep(1.5)
         
+        # 1-1. Disable allowed meal times to test B2B time/day restriction policy violation
+        print("Disabling all meal times to test policy violation...")
+        for meal in ['조식', '중식', '석식']:
+            cb = wait.until(EC.element_to_be_clickable((By.XPATH, f"//span[contains(text(), '{meal}')]/preceding-sibling::input[@type='checkbox']")))
+            if cb.is_selected():
+                cb.click()
+                time.sleep(0.5)
+                
         # 2. Switch to Worker Mobile View (Worker_Mobile)
         print("Switching to Worker Mobile view...")
         worker_role_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='인부 모바일 식권']")))
@@ -104,19 +119,54 @@ def run_simulation():
             
         time.sleep(1.5)
         
-        # 3. Switch to Store POS
+        # 3. Switch to Store POS (Failure Scenario: Policy Violation)
         print("Switching to Store POS view...")
         pos_role_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Store POS & Scanner']")))
         pos_role_btn.click()
         time.sleep(1.5)
         
         # Click "가상 QR 스캔 실행"
-        print("Executing virtual QR scan Checkout...")
+        print("Executing virtual QR scan (Expecting Policy Violation failure)...")
         scan_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), '가상 QR 스캔 실행')]")))
         scan_btn.click()
-        time.sleep(3.5) # Wait for success screen
+        time.sleep(3.5) # Wait for error screen
         
-        # Take POS checkout screenshot
+        # Take POS checkout failure screenshot
+        driver.save_screenshot(f"{output_dir}/store_pos_policy_failure.png")
+        print("Saved store POS policy failure screenshot.")
+        
+        # Acknowledge error and reset POS
+        print("Acknowledging POS error and resetting...")
+        retry_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='확인 및 재시도']")))
+        retry_btn.click()
+        time.sleep(1.5)
+        
+        # 3-1. Switch back to B2B Portal to re-enable allowed times
+        print("Switching back to B2B Portal to restore allowed times...")
+        b2b_role_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='B2B Portal (식권대장)']")))
+        b2b_role_btn.click()
+        time.sleep(1.5)
+        
+        print("Re-enabling all meal times...")
+        for meal in ['조식', '중식', '석식']:
+            cb = wait.until(EC.element_to_be_clickable((By.XPATH, f"//span[contains(text(), '{meal}')]/preceding-sibling::input[@type='checkbox']")))
+            if not cb.is_selected():
+                cb.click()
+                time.sleep(0.5)
+                
+        # 3-2. Switch back to Store POS (Success Scenario: Restored Policy)
+        print("Switching back to Store POS view for successful payment...")
+        pos_role_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Store POS & Scanner']")))
+        pos_role_btn.click()
+        time.sleep(1.5)
+        
+        # Click "가상 QR 스캔 실행" again
+        print("Executing virtual QR scan (Expecting Success)...")
+        scan_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), '가상 QR 스캔 실행')]")))
+        scan_btn.click()
+        time.sleep(3.5)
+        
+        # Take POS checkout success screenshot
         driver.save_screenshot(f"{output_dir}/store_pos_success.png")
         print("Saved store POS success screenshot.")
         
